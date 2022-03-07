@@ -8,6 +8,8 @@ from sklearn.linear_model import SGDClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline
 
+from sklearn.metrics import f1_score
+
 ############################################################
 
 #linearModel = linear_model.LinearRegression()
@@ -46,7 +48,7 @@ for dataset in datasets:
 
 	print("Processing Labels")
 
-	labels_list = set(train_set_label)
+	labels_list = sorted(list(set(train_set_label)))
 
 	label_to_value_dict = {}
 
@@ -85,7 +87,7 @@ for dataset in datasets:
 	print("Performance for " + dataset + " dataset")
 	print(score)
 	print("Total Possible Labels")
-	print(labels_list)
+	print(len(labels_list))
 
 
 
