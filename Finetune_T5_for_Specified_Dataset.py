@@ -15,13 +15,15 @@ word_embedding_model = models.Transformer('sentence-transformers/sentence-t5-xl'
 
 pooling_model = models.Pooling(word_embedding_model.get_word_embedding_dimension())
 
-model = SentenceTransformer(modules=[word_embedding_model, pooling_model], device = 'cpu')
+model = SentenceTransformer(modules=[word_embedding_model, pooling_model], device = 'cuda')
 
 ################################################################################################################
 
-specified_dataset = 'chemprot'
+#specified_dataset = 'chemprot'
+#specified_dataset = 'sci-cite'
+specified_dataset = 'sciie-relation-extraction'
 
-print("Processing " + specified_dataset)
+print("Processing Dataset: " + specified_dataset)
 
 # Chemprot train, dev, and test
 with open('text_classification/' + specified_dataset + '/train.txt') as f:
@@ -56,13 +58,15 @@ total_training_set_labels = train_set_label + dev_set_label
 
 inputs_training = []
 
+total_training_set_text = [[text, label] for text, label in zip(total_training_set_text, total_training_set_labels)]
+
 for text, label in zip(total_training_set_text, total_training_set_labels):
-	inputs_training.append(InputExample(texts="test text here", label= float(1)))
-	#inputs_training.append(InputExample(texts=text, label= float(label_to_value_dict[label])))
+	#inputs_training.append(InputExample(texts="test text here", label= float(1)))
+	inputs_training.append(InputExample(texts=text, label= float(label_to_value_dict[label])))
 
 ################################################################################################################
 
-train_dataloader = DataLoader(inputs_training, shuffle=True, batch_size=16)
+train_dataloader = DataLoader(inputs_training, shuffle=True, batch_size=8)
 
 train_loss = losses.CosineSimilarityLoss(model)
 
