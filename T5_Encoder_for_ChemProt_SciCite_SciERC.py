@@ -33,7 +33,16 @@ def gatherHiddenStates(input_texts):
 			with torch.no_grad():
 
 				outputs = model(input_ids=input_ids[i:i + 32])
+
 				last_hidden_states = outputs.last_hidden_state
+
+				if i == 0 or i == 1:
+
+					print("Current outputs")
+					print(outputs)
+					print("Current Hidden State")
+					print(last_hidden_states.shape)
+					print(last_hidden_states)
 
 				averaged_hidden_state = torch.mean(last_hidden_states, 1)
 

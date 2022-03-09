@@ -26,7 +26,7 @@ from tqdm.auto import tqdm
 class CustomBERTModel(nn.Module):
     def __init__(self, number_of_labels):
           super(CustomBERTModel, self).__init__()
-          self.bert = BertModel.from_pretrained("bert-base-uncased")
+          self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
           ### New layers:
           self.lstm = nn.LSTM(768, 256, batch_first=True,bidirectional=True)
           self.linear = nn.Linear(256*2, number_of_labels)
@@ -54,9 +54,9 @@ device = "cuda:0"
 
 classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
-model_choice = "bert-base-uncased"
+model_choice = "allenai/scibert_scivocab_uncased"
 
-tokenizer = AutoTokenizer.from_pretrained(model_choice)
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 #model = CustomBERTModel(3)
 
 ############################################################
@@ -233,9 +233,3 @@ for dataset in classification_datasets:
 
     results = metric.compute(references=total_predictions, predictions=total_references)
     print("Results for Test Set: " + str(results['accuracy']))
-
-
-
-
-
-

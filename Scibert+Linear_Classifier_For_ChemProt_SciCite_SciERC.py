@@ -1,4 +1,5 @@
 
+
 from transformers import AutoTokenizer
 from transformers import AutoModelForSequenceClassification
 
@@ -23,10 +24,9 @@ device = "cuda:0"
 
 classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
-model_choice = "bert-base-uncased"
-classifier_type = 'linear_classifier'
+model_choice = "allenai/scibert_scivocab_uncased"
 
-tokenizer = AutoTokenizer.from_pretrained(model_choice)
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 ############################################################
 
@@ -108,8 +108,8 @@ for dataset in classification_datasets:
 
 	print("Loading Model")
 
-	train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=32)
-	eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=32)
+	train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=16)
+	eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=16)
 
 
 
@@ -142,11 +142,6 @@ for dataset in classification_datasets:
 	        batch = {k: v.to(device) for k, v in batch.items()}
 	        outputs = model(**batch)
 	        loss = outputs.loss
-
-	        print("loss")
-	        print(type(loss))
-	        print(loss)
-
 	        loss.backward()
 
 	        optimizer.step()
@@ -186,11 +181,6 @@ for dataset in classification_datasets:
 
 	results = metric.compute(references=total_predictions, predictions=total_references)
 	print("Results for Test Set: " + str(results['accuracy']))
-
-
-
-
-
 
 
 

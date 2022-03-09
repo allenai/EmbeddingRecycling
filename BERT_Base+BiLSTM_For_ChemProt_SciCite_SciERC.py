@@ -188,7 +188,7 @@ for dataset in classification_datasets:
 
             loss.backward()
             optimizer.step()
-            #lr_scheduler.step()
+            lr_scheduler.step()
             optimizer.zero_grad()
             progress_bar.update(1)
 
@@ -233,6 +233,9 @@ for dataset in classification_datasets:
 
     results = metric.compute(references=total_predictions, predictions=total_references)
     print("Results for Test Set: " + str(results['accuracy']))
+
+
+
 
 
 
