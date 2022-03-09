@@ -13,7 +13,7 @@ device = "cuda:0"
 datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 model_choice = "t5-3b"
 
-tokenizer = T5Tokenizer.from_pretrained(model_choice)
+tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
 model = T5EncoderModel.from_pretrained(model_choice).to(device)
 
 ############################################################
@@ -23,7 +23,7 @@ def gatherHiddenStates(input_texts):
 	embeddings_list = []
 
 	input_ids = tokenizer(
-				    input_texts, return_tensors="pt", padding=True, truncation=True
+				    input_texts, return_tensors="pt", padding="max_length", truncation=True
 				).input_ids.to(device)
 
 	for i in tqdm(range(0, len(input_texts))):
@@ -36,13 +36,13 @@ def gatherHiddenStates(input_texts):
 
 				last_hidden_states = outputs.last_hidden_state
 
-				if i == 0 or i == 1:
+				#if i <= 1000:
 
-					print("Current outputs")
-					print(outputs)
-					print("Current Hidden State")
-					print(last_hidden_states.shape)
-					print(last_hidden_states)
+					#print("Current outputs")
+					#print(outputs)
+					#print("Current Hidden State")
+					#print(last_hidden_states.shape)
+					#print(last_hidden_states)
 
 				averaged_hidden_state = torch.mean(last_hidden_states, 1)
 
