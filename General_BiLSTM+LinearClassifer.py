@@ -2,7 +2,7 @@
 
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel
-from transformers import BertModel, AutoTokenizer, AutoModel
+from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
 
 import pandas as pd
 import numpy as np
@@ -24,7 +24,7 @@ from tqdm.auto import tqdm
 ############################################################
 
 class CustomBERTModel(nn.Module):
-    def __init__(self, number_of_labels, encoder_model, embedding_size):
+    def __init__(self, number_of_labels, encoder_model, embedding_size, dropout_layer):
           super(CustomBERTModel, self).__init__()
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
           self.encoderModel = encoder_model
@@ -33,6 +33,7 @@ class CustomBERTModel(nn.Module):
           self.linear = nn.Linear(256*2, number_of_labels)
 
           self.embedding_size = embedding_size
+          self.dropout_layer = dropout_layer
           
 
     def forward(self, ids, mask):
@@ -46,6 +47,10 @@ class CustomBERTModel(nn.Module):
           lstm_output, (h,c) = self.lstm(sequence_output) ## extract the 1st token's embeddings
 
           hidden = torch.cat((lstm_output[:,-1, :256],lstm_output[:,0, 256:]),dim=-1)
+
+          if self.dropout_layer == True:
+            dropout_layer = nn.Dropout(p=0.5)
+            hidden = dropout_layer(hidden)
           
           linear_output = self.linear(hidden.view(-1,256*2)) ### assuming that you are only using the output of the last LSTM cell to perform classification
 
@@ -56,25 +61,34 @@ class CustomBERTModel(nn.Module):
 
 device = "cuda:0"
 
-#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
-classification_datasets = ['sciie-relation-extraction']
+#classification_datasets = ['sciie-relation-extraction']
 
-#model_choice = "t5-3b"
-#tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
-#model_encoding = T5EncoderModel.from_pretrained(model_choice)
-#embedding_size = 1024
+model_choice = "t5-3b"
+tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
+model_encoding = T5EncoderModel.from_pretrained(model_choice)
+embedding_size = 1024
+current_dropout = False
 
-model_choice = 'bert-base-uncased'
-tokenizer = AutoTokenizer.from_pretrained(model_choice)
-model_encoding = BertModel.from_pretrained(model_choice)
-embedding_size = 768
+#model_choice = 'bert-base-uncased'
+#tokenizer = AutoTokenizer.from_pretrained(model_choice)
+#model_encoding = BertModel.from_pretrained(model_choice)
+#embedding_size = 768
+#current_dropout = False
 
 #model_choice = 'allenai/scibert_scivocab_uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 #model_encoding = AutoModel.from_pretrained(model_choice)
 #embedding_size = 768
+#current_dropout = False
+
+#model_choice = 'hivemind/gpt-j-6B-8bit'
+#tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+#model_encoding = AutoModel.from_pretrained(model_choice)
+#embedding_size = 4096
+#current_dropout = False
 
 
 
@@ -89,7 +103,7 @@ def tokenize_function(examples):
 
 for dataset in classification_datasets:
 
-    print("Processing " + dataset + " using " + model_choice)
+    print("Processing " + dataset + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
 
     # Chemprot train, dev, and test
     with open('text_classification/' + dataset + '/train.txt') as f:
@@ -158,7 +172,7 @@ for dataset in classification_datasets:
 
     print("Number of labels: " + str(len(set(train_set_label))))
 
-    model = CustomBERTModel(len(set(train_set_label)), model_encoding, embedding_size)
+    model = CustomBERTModel(len(set(train_set_label)), model_encoding, embedding_size, current_dropout)
 
     device = torch.device("cuda:0")
     model.to(device)
@@ -256,6 +270,12 @@ for dataset in classification_datasets:
     print(total_references.shape)
 
     results = metric.compute(references=total_predictions, predictions=total_references)
-    print("Results for Test Set: " + str(results['accuracy']))
+    print("Accuracy for Test Set: " + str(results['accuracy']))
+
+    f_1_metric = load_metric("f1")
+    f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
+    print("F1 for Test Set: " + str(f_1_results['f1']))
+
+
 
 

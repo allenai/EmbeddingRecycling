@@ -2,7 +2,7 @@
 
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel
-from transformers import BertModel, AutoTokenizer, AutoModel
+from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
 
 import pandas as pd
 import numpy as np
@@ -64,15 +64,20 @@ classification_datasets = ['sciie-relation-extraction']
 #model_encoding = T5EncoderModel.from_pretrained(model_choice)
 #embedding_size = 1024
 
-model_choice = 'bert-base-uncased'
-tokenizer = AutoTokenizer.from_pretrained(model_choice)
-model_encoding = BertModel.from_pretrained(model_choice)
-embedding_size = 768
+#model_choice = 'bert-base-uncased'
+#tokenizer = AutoTokenizer.from_pretrained(model_choice)
+#model_encoding = BertModel.from_pretrained(model_choice)
+#embedding_size = 768
 
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice)
 #model_encoding = AutoModel.from_pretrained(model_choice)
 #embedding_size = 768
+
+model_choice = 'hivemind/gpt-j-6B-8bit'
+tokenizer = GPT2Tokenizer.from_pretrained("gpt2", model_max_length=512)
+model_encoding = BertModel.from_pretrained(model_choice)
+embedding_size = 4096
 
 
 
@@ -80,7 +85,7 @@ embedding_size = 768
 
 def tokenize_function(examples):
 
-    return tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
+    return tokenizer(examples["text"], truncation=True)#.input_ids
 
 ############################################################
 
