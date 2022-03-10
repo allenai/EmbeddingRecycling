@@ -1,8 +1,8 @@
+
+
 import torch.nn as nn
-from transformers import BertModel
-from transformers import AutoTokenizer
-from transformers import AutoModel
-from transformers import BertTokenizer, BertForSequenceClassification
+from transformers import T5Tokenizer, T5EncoderModel
+from transformers import BertModel, AutoTokenizer, AutoModel
 
 import pandas as pd
 import numpy as np
@@ -24,29 +24,29 @@ from tqdm.auto import tqdm
 ############################################################
 
 class CustomBERTModel(nn.Module):
-    def __init__(self, number_of_labels):
+    def __init__(self, number_of_labels, encoder_model, embedding_size):
           super(CustomBERTModel, self).__init__()
-          self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
+          #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
+          self.encoderModel = encoder_model
           ### New layers:
-          self.lstm = nn.LSTM(768, 256, batch_first=True,bidirectional=True)
+          self.lstm = nn.LSTM(embedding_size, 256, batch_first=True,bidirectional=True)
           self.linear = nn.Linear(256*2, number_of_labels)
+
+          self.embedding_size = embedding_size
           
 
     def forward(self, ids, mask):
           
-          total_output = self.bert(
+          total_output = self.encoderModel(
                ids, 
                attention_mask=mask)
 
-
           sequence_output = total_output['last_hidden_state']
-          pooled_output = total_output['pooler_output']
-
-          #print("BERT Output")
-          #print(sequence_output.shape)
 
           lstm_output, (h,c) = self.lstm(sequence_output) ## extract the 1st token's embeddings
+
           hidden = torch.cat((lstm_output[:,-1, :256],lstm_output[:,0, 256:]),dim=-1)
+          
           linear_output = self.linear(hidden.view(-1,256*2)) ### assuming that you are only using the output of the last LSTM cell to perform classification
 
           return linear_output
@@ -54,24 +54,42 @@ class CustomBERTModel(nn.Module):
 
 ############################################################
 
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
-#classification_datasets = ['chemprot']
-model_choice = "allenai/scibert_scivocab_uncased"
+device = "cuda:0"
 
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-#model = CustomBERTModel(3)
+#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+#classification_datasets = ['chemprot']
+#classification_datasets = ['sci-cite']
+classification_datasets = ['sciie-relation-extraction']
+
+#model_choice = "t5-3b"
+#tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
+#model_encoding = T5EncoderModel.from_pretrained(model_choice)
+#embedding_size = 1024
+
+model_choice = 'bert-base-uncased'
+tokenizer = AutoTokenizer.from_pretrained(model_choice)
+model_encoding = BertModel.from_pretrained(model_choice)
+embedding_size = 768
+
+#model_choice = 'allenai/scibert_scivocab_uncased'
+#tokenizer = AutoTokenizer.from_pretrained(model_choice)
+#model_encoding = AutoModel.from_pretrained(model_choice)
+#embedding_size = 768
+
+
 
 ############################################################
 
 def tokenize_function(examples):
-    return tokenizer(examples["text"], padding="max_length", truncation=True)
+
+    return tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
 
 ############################################################
 
 
 for dataset in classification_datasets:
 
-    print("Processing " + dataset)
+    print("Processing " + dataset + " using " + model_choice)
 
     # Chemprot train, dev, and test
     with open('text_classification/' + dataset + '/train.txt') as f:
@@ -113,7 +131,7 @@ for dataset in classification_datasets:
 
     ############################################################
 
-    training_dataset_pandas = pd.DataFrame({'label': train_set_label + dev_set_label, 'text': train_set_text + dev_set_text})
+    training_dataset_pandas = pd.DataFrame({'label': train_set_label + dev_set_label, 'text': train_set_text + dev_set_text})#[:1000]
     training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
     training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
 
@@ -135,17 +153,15 @@ for dataset in classification_datasets:
 
     print("Loading Model")
 
-    train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=32)
-    eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=32)
+    train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=6)
+    eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=6)
 
+    print("Number of labels: " + str(len(set(train_set_label))))
 
-
-    model = CustomBERTModel(len(set(train_set_label)))
+    model = CustomBERTModel(len(set(train_set_label)), model_encoding, embedding_size)
 
     device = torch.device("cuda:0")
     model.to(device)
-
-    print("Number of labels: " + str(len(set(train_set_label))))
 
     ############################################################
 
@@ -174,25 +190,30 @@ for dataset in classification_datasets:
     model.train()
     for epoch in range(num_epochs):
         for batch in train_dataloader:
+
+            #with torch.no_grad():
             
-            batch = {k: v.to(device) for k, v in batch.items()}
-            labels = batch['labels']
-            
-            new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-            outputs = model(**new_batch)
+                batch = {k: v.to(device) for k, v in batch.items()}
+                labels = batch['labels']
 
-            #print("outputs")
-            #print(type(outputs))
-            #print((outputs.shape))
-            #print(outputs[0])
+                #print("Batch")
+                #print(batch)
+                
+                new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+                outputs = model(**new_batch)
 
-            loss = criterion(outputs, labels)
+                #print("outputs")
+                #print(type(outputs))
+                #print((outputs.shape))
+                #print(outputs[0])
 
-            loss.backward()
-            optimizer.step()
-            #lr_scheduler.step()
-            optimizer.zero_grad()
-            progress_bar.update(1)
+                loss = criterion(outputs, labels)
+
+                loss.backward()
+                optimizer.step()
+                #lr_scheduler.step()
+                optimizer.zero_grad()
+                progress_bar.update(1)
 
 
     ############################################################
@@ -213,6 +234,7 @@ for dataset in classification_datasets:
 
             batch = {k: v.to(device) for k, v in batch.items()}
             labels = batch['labels']
+
             new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
 
             outputs = model(**new_batch)
@@ -235,3 +257,5 @@ for dataset in classification_datasets:
 
     results = metric.compute(references=total_predictions, predictions=total_references)
     print("Results for Test Set: " + str(results['accuracy']))
+
+
