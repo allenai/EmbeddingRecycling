@@ -49,6 +49,7 @@ class CustomBERTModel(nn.Module):
           hidden = torch.cat((lstm_output[:,-1, :256],lstm_output[:,0, 256:]),dim=-1)
 
           if self.dropout_layer == True:
+            print("Performing dropout")
             dropout_layer = nn.Dropout(p=0.5)
             hidden = dropout_layer(hidden)
           
@@ -66,17 +67,17 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
 
-model_choice = "t5-3b"
-tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
-model_encoding = T5EncoderModel.from_pretrained(model_choice)
-embedding_size = 1024
-current_dropout = False
-
-#model_choice = 'bert-base-uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-#model_encoding = BertModel.from_pretrained(model_choice)
-#embedding_size = 768
+#model_choice = "t5-3b"
+#tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
+#model_encoding = T5EncoderModel.from_pretrained(model_choice)
+#embedding_size = 1024
 #current_dropout = False
+
+model_choice = 'bert-base-uncased'
+tokenizer = AutoTokenizer.from_pretrained(model_choice)
+model_encoding = BertModel.from_pretrained(model_choice)
+embedding_size = 768
+current_dropout = False
 
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
