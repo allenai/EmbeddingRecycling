@@ -24,7 +24,9 @@ device = "cuda:0"
 
 #classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 classification_datasets = ['chemprot']
+
 model_choice = "t5-3b"
+#model_choice = "t5"
 
 tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
 

@@ -42,8 +42,8 @@ class CustomBERTModel(nn.Module):
           sequence_output = total_output['last_hidden_state']
           pooled_output = total_output['pooler_output']
 
-          print("BERT Output")
-          print(sequence_output.shape)
+          #print("BERT Output")
+          #print(sequence_output.shape)
 
           lstm_output, (h,c) = self.lstm(sequence_output) ## extract the 1st token's embeddings
           hidden = torch.cat((lstm_output[:,-1, :256],lstm_output[:,0, 256:]),dim=-1)
@@ -53,8 +53,6 @@ class CustomBERTModel(nn.Module):
 
 
 ############################################################
-
-device = "cuda:0"
 
 classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
