@@ -62,10 +62,10 @@ class CustomBERTModel(nn.Module):
 
 device = "cuda:0"
 
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
-#classification_datasets = ['sciie-relation-extraction']
+classification_datasets = ['sciie-relation-extraction']
 
 #model_choice = "t5-3b"
 #tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)

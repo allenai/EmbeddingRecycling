@@ -54,15 +54,15 @@ class CustomBERTModel(nn.Module):
 
 device = "cuda:0"
 
-#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
-classification_datasets = ['sciie-relation-extraction']
+#classification_datasets = ['sciie-relation-extraction']
 
-#model_choice = "t5-3b"
-#tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
-#model_encoding = T5EncoderModel.from_pretrained(model_choice)
-#embedding_size = 1024
+model_choice = "t5-3b"
+tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
+model_encoding = T5EncoderModel.from_pretrained(model_choice)
+embedding_size = 1024
 
 #model_choice = 'bert-base-uncased'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice)
@@ -70,14 +70,14 @@ classification_datasets = ['sciie-relation-extraction']
 #embedding_size = 768
 
 #model_choice = 'allenai/scibert_scivocab_uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 #model_encoding = AutoModel.from_pretrained(model_choice)
 #embedding_size = 768
 
-model_choice = 'hivemind/gpt-j-6B-8bit'
-tokenizer = GPT2Tokenizer.from_pretrained("gpt2", model_max_length=512)
-model_encoding = BertModel.from_pretrained(model_choice)
-embedding_size = 4096
+#model_choice = 'hivemind/gpt-j-6B-8bit'
+#tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
+#model_encoding = BertModel.from_pretrained(model_choice)
+#embedding_size = 4096
 
 
 
@@ -85,7 +85,7 @@ embedding_size = 4096
 
 def tokenize_function(examples):
 
-    return tokenizer(examples["text"], truncation=True)#.input_ids
+    return tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
 
 ############################################################
 
@@ -259,5 +259,9 @@ for dataset in classification_datasets:
     print(total_references.shape)
 
     results = metric.compute(references=total_predictions, predictions=total_references)
-    print("Results for Test Set: " + str(results['accuracy']))
+    print("Accuracy for Test Set: " + str(results['accuracy']))
+
+    f_1_metric = load_metric("f1")
+    f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
+    print("F1 for Test Set: " + str(f_1_results['f1']))
 
