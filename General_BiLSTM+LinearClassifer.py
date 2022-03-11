@@ -23,8 +23,6 @@ from tqdm.auto import tqdm
 
 ############################################################
 
-print("With 0.5 dropout for frozen embeddings")
-
 class CustomBERTModel(nn.Module):
     def __init__(self, number_of_labels, encoder_model, embedding_size, dropout_layer):
           super(CustomBERTModel, self).__init__()
@@ -58,7 +56,7 @@ class CustomBERTModel(nn.Module):
 
           sequence_output = total_output['last_hidden_state']
 
-          #dropout_layer = nn.Dropout(p=0.5)
+          #dropout_layer = nn.Dropout(p=0.1)
           #sequence_output = dropout_layer(sequence_output)
 
           lstm_output, (h,c) = self.lstm(sequence_output) ## extract the 1st token's embeddings
@@ -113,7 +111,7 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 
 model_choice = 'allenai/scibert_scivocab_uncased'
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-model_encoding = AutoModel.from_pretrained(model_choice)
+model_encoding = BertModel.from_pretrained(model_choice)
 embedding_size = 768
 current_dropout = False
 for param in model_encoding.parameters():
@@ -202,8 +200,8 @@ for dataset in classification_datasets:
 
     print("Loading Model")
 
-    train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=8)
-    eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=8)
+    train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=32)
+    eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=32)
 
     print("Number of labels: " + str(len(set(train_set_label))))
 
@@ -222,13 +220,13 @@ for dataset in classification_datasets:
     #)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = AdamW(model.parameters(), lr=2e-5)
+    optimizer = AdamW(model.parameters(), lr=0.001)
 
     num_epochs = 3
     num_training_steps = num_epochs * len(train_dataloader)
-    lr_scheduler = get_scheduler(
-        name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
-    )
+    #lr_scheduler = get_scheduler(
+    #    name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
+    #)
 
     ############################################################
 
@@ -260,7 +258,7 @@ for dataset in classification_datasets:
 
                 loss.backward()
                 optimizer.step()
-                lr_scheduler.step()
+                #lr_scheduler.step()
                 optimizer.zero_grad()
                 progress_bar.update(1)
 
