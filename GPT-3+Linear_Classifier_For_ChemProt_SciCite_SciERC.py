@@ -193,7 +193,7 @@ for dataset in classification_datasets:
     import torch.optim as optim
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=2e-5)
+    optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=2e-5)
 
     ############################################################
 

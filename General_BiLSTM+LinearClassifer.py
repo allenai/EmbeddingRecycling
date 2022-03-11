@@ -29,7 +29,7 @@ class CustomBERTModel(nn.Module):
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
           self.encoderModel = encoder_model
           ### New layers:
-          self.lstm = nn.LSTM(embedding_size, 256, batch_first=True,bidirectional=True)
+          self.lstm = nn.LSTM(embedding_size, 256, batch_first=True,bidirectional=True, num_layers=2)
           self.linear = nn.Linear(256*2, number_of_labels)
 
           self.embedding_size = embedding_size
@@ -62,10 +62,10 @@ class CustomBERTModel(nn.Module):
 
 device = "cuda:0"
 
-#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
-classification_datasets = ['sciie-relation-extraction']
+#classification_datasets = ['sciie-relation-extraction']
 
 #model_choice = "t5-3b"
 #tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -78,6 +78,8 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice)
 model_encoding = BertModel.from_pretrained(model_choice)
 embedding_size = 768
 current_dropout = False
+for param in model_encoding.parameters():
+    param.requires_grad = False
 
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -191,9 +193,14 @@ for dataset in classification_datasets:
     num_training_steps = num_epochs * len(train_dataloader)
 
     import torch.optim as optim
+    from transformers import get_scheduler
 
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=2e-5)
+
+    lr_scheduler = get_scheduler(
+        name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
+    )
 
     ############################################################
 
@@ -225,7 +232,7 @@ for dataset in classification_datasets:
 
                 loss.backward()
                 optimizer.step()
-                #lr_scheduler.step()
+                lr_scheduler.step()
                 optimizer.zero_grad()
                 progress_bar.update(1)
 

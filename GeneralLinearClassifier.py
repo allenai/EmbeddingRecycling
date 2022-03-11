@@ -47,6 +47,7 @@ class CustomBERTModel(nn.Module):
           # sequence_output has the following shape: (batch_size, sequence_length, 768)
           linear1_output = self.linear1(sequence_output[:,0,:].view(-1, self.embedding_size)) ## extract the 1st token's embeddings
           linear2_output = self.linear2(linear1_output)
+          #linear2_output = self.linear2(sequence_output[:,0,:].view(-1, self.embedding_size))
 
           return linear2_output
 
@@ -184,13 +185,14 @@ for dataset in classification_datasets:
     #    name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
     #)
 
+    criterion = nn.CrossEntropyLoss()
+    optimizer = AdamW(model.parameters(), lr=2e-5)
+
     num_epochs = 3
     num_training_steps = num_epochs * len(train_dataloader)
-
-    import torch.optim as optim
-
-    criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=2e-5)
+    lr_scheduler = get_scheduler(
+        name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
+    )
 
     ############################################################
 
@@ -218,11 +220,14 @@ for dataset in classification_datasets:
                 #print((outputs.shape))
                 #print(outputs[0])
 
+                #print('output')
+                #print(outputs)
+
                 loss = criterion(outputs, labels)
 
                 loss.backward()
                 optimizer.step()
-                #lr_scheduler.step()
+                lr_scheduler.step()
                 optimizer.zero_grad()
                 progress_bar.update(1)
 
