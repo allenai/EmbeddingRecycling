@@ -1,5 +1,3 @@
-
-
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
@@ -21,6 +19,18 @@ from transformers import get_scheduler
 import torch
 from tqdm.auto import tqdm
 
+
+from sklearn import linear_model
+import numpy as np
+import json
+
+import numpy as np
+from sklearn.linear_model import SGDClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+
+from sklearn.metrics import f1_score
+
 ############################################################
 
 print("With 0.5 dropout for frozen embeddings")
@@ -32,20 +42,7 @@ class CustomBERTModel(nn.Module):
           self.encoderModel = encoder_model
           ### New layers:
 
-          #self.lstm = nn.LSTM(embedding_size, 256, batch_first=True,bidirectional=True, num_layers=2)
-          #self.linear = nn.Linear(256*2, number_of_labels)
           self.lstm = nn.LSTM(embedding_size, 200, batch_first=True,bidirectional=True, num_layers=2)
-
-          self.perceptron = nn.Sequential(
-                          nn.Linear(200*2, 200),
-                          nn.ReLU(),
-                          nn.Linear(200, 100),
-                          nn.ReLU(),
-                          nn.Linear(100, number_of_labels)
-                        )
-
-          self.embedding_size = embedding_size
-          self.dropout_layer = dropout_layer
 
 
           
@@ -58,34 +55,11 @@ class CustomBERTModel(nn.Module):
 
           sequence_output = total_output['last_hidden_state']
 
-          #dropout_layer = nn.Dropout(p=0.5)
-          #sequence_output = dropout_layer(sequence_output)
-
           lstm_output, (h,c) = self.lstm(sequence_output) ## extract the 1st token's embeddings
 
-          #print("lstm_output")
-          #print(lstm_output.shape)
+          hidden = torch.cat((lstm_output[:,-1, :],lstm_output[:,0, :]),dim=-1)
 
-          hidden = torch.cat((lstm_output[:,-1, :200],lstm_output[:,0, 200:]),dim=-1)
-
-          #print('hidden')
-          #print(hidden.shape)
-
-          linear_output = self.perceptron(hidden)
-
-          #print('linear_output')
-          #print(linear_output.shape)
-
-          #hidden = torch.cat((lstm_output[:,-1, :256],lstm_output[:,0, 256:]),dim=-1)
-
-          #if self.dropout_layer == True:
-          #  print("Performing dropout")
-          #  dropout_layer = nn.Dropout(p=0.5)
-          #  hidden = dropout_layer(hidden)
-          
-          #linear_output = self.linear(hidden.view(-1,256*2)) ### assuming that you are only using the output of the last LSTM cell to perform classification
-
-          return linear_output
+          return hidden
 
 
 ############################################################
@@ -189,8 +163,8 @@ for dataset in classification_datasets:
     test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
 
 
-    dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 'test' : test_dataset_arrow})
-    tokenized_datasets = dataset.map(tokenize_function, batched=True)
+    joint_dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 'test' : test_dataset_arrow})
+    tokenized_datasets = joint_dataset.map(tokenize_function, batched=True)
 
 
     tokenized_datasets = tokenized_datasets.remove_columns(["text"])
@@ -214,33 +188,16 @@ for dataset in classification_datasets:
 
     ############################################################
 
+    print("Gathering Traing Set")
 
-    #optimizer = AdamW(model.parameters(), lr=5e-5)
+    progress_bar = tqdm(range(len(train_dataloader)))
 
-    #lr_scheduler = get_scheduler(
-    #    name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
-    #)
+    total_training_set = torch.FloatTensor([]).to(device)
+    total_training_labels = torch.FloatTensor([]).to(device) 
 
-    criterion = nn.CrossEntropyLoss()
-    optimizer = AdamW(model.parameters(), lr=2e-5)
+    for batch in train_dataloader:
 
-    num_epochs = 3
-    num_training_steps = num_epochs * len(train_dataloader)
-    lr_scheduler = get_scheduler(
-        name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
-    )
-
-    ############################################################
-
-    print("Beginning Training")
-
-    progress_bar = tqdm(range(num_training_steps))
-
-    model.train()
-    for epoch in range(num_epochs):
-        for batch in train_dataloader:
-
-            #with torch.no_grad():
+            with torch.no_grad():
             
                 batch = {k: v.to(device) for k, v in batch.items()}
                 labels = batch['labels']
@@ -256,26 +213,31 @@ for dataset in classification_datasets:
                 #print((outputs.shape))
                 #print(outputs[0])
 
-                loss = criterion(outputs, labels)
+                total_training_set = torch.cat((total_training_set, outputs), 0)
+                total_training_labels = torch.cat((total_training_labels, labels), 0)
 
-                loss.backward()
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
                 progress_bar.update(1)
+
+
+    total_training_set = total_training_set.to('cpu').numpy()
+    total_training_labels = total_training_labels.to('cpu').numpy()
+
+    print(total_training_set.shape)
+    print(total_training_labels.shape)
+
 
 
     ############################################################
 
-    print("Beginning Evaluation")
+    print("Gather Testing Set")
 
     metric = load_metric("accuracy")
     model.eval()
 
-    total_predictions = torch.FloatTensor([]).to(device)
-    total_references = torch.FloatTensor([]).to(device)
+    total_testing_set = torch.FloatTensor([]).to(device)
+    total_testing_labels = torch.FloatTensor([]).to(device)
 
-    progress_bar = tqdm(range(num_training_steps))
+    progress_bar = tqdm(range(len(train_dataloader)))
 
     for batch in eval_dataloader:
 
@@ -288,28 +250,51 @@ for dataset in classification_datasets:
 
             outputs = model(**new_batch)
 
-            logits = outputs
-            predictions = torch.argmax(logits, dim=-1)
-            metric.add_batch(predictions=predictions, references=labels)
-
-            total_predictions = torch.cat((total_predictions, predictions), 0)
-            total_references = torch.cat((total_references, labels), 0)
+            total_testing_set = torch.cat((total_testing_set, outputs), 0)
+            total_testing_labels = torch.cat((total_testing_labels, labels), 0)
 
             progress_bar.update(1)
 
+
+
+    total_testing_set = total_testing_set.to('cpu').numpy()
+    total_testing_labels = total_testing_labels.to('cpu').numpy()
+
+    print(total_testing_set.shape)
+    print(total_testing_labels.shape)
+
+
     ############################################################
 
-    print("--------------------------")
-    print("Predictions Shapes")
-    print(total_predictions.shape)
-    print(total_references.shape)
 
-    results = metric.compute(references=total_predictions, predictions=total_references)
-    print("Accuracy for Test Set: " + str(results['accuracy']))
+    print("Train Model")
 
-    f_1_metric = load_metric("f1")
-    f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
-    print("F1 for Test Set: " + str(f_1_results['f1']))
+    linearModel = make_pipeline(StandardScaler(),
+                    SGDClassifier(loss="perceptron", learning_rate="optimal", max_iter=1000, tol=1e-3, random_state=0))
+
+    linearModel.fit(total_training_set, total_training_labels)
+
+
+    ############################################################
+
+    print("Testing Model")
+
+    score = linearModel.score(total_testing_set, total_testing_labels)
+
+
+    print("Performance for " + dataset + " dataset")
+    print(score)
+    print("Total Possible Labels")
+    print(len(labels_list))
+
+    predictions = linearModel.predict(total_testing_set)
+    print("F-1 Score for " + dataset + " dataset")
+    print(f1_score(total_testing_labels, predictions, average='macro'))
+
+
+
+
+
 
 
 

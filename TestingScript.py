@@ -1,24 +1,32 @@
-import torch.nn as nn
-import torch
+import numpy as np
+from sklearn.linear_model import SGDClassifier
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
 
-# Example of target with class indices
-loss = nn.CrossEntropyLoss()
-input = torch.randn(3, 5, requires_grad=True)
-target = torch.empty(3, dtype=torch.long).random_(5)
+X_train = np.array([[[-1, -1], [0, 1]], [[-2, -1], [0, 1]], [[0, 1], [1, 1]], [[0, 1], [2, 1]]])
+X_test = np.array([[[2, -1], [1, 0]], [[2, 0], [1, 1]]])
 
-print('input')
-print(input)
+Y_train = np.array([1, 1, 2, 2])
+Y_test = np.array([0, 2])
 
-print('target')
-print(target)
+print(X_train.shape)
+print(X_test.shape)
 
-output = loss(input, target)
-output.backward()
-# Example of target with class probabilities
-input = torch.randn(3, 5, requires_grad=True)
-target = torch.randn(3, 5).softmax(dim=1)
-output = loss(input, target)
-output.backward()
+X_train=X_train.reshape(len(X_train),-1)
+X_test=X_test.reshape(len(X_test),-1)
+
+print(X_train.shape)
+print(X_test.shape)
+
+
+
+# Always scale the input. The most convenient way is to use a pipeline.
+clf = make_pipeline(StandardScaler(),
+                    SGDClassifier(max_iter=1000, tol=1e-3))
+clf.fit(X_train, Y_train)
+
+
+print(clf.predict(X_test))
 
 
 
