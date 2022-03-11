@@ -3,6 +3,7 @@
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
+import tensorflow as tf
 
 import pandas as pd
 import numpy as np
@@ -59,25 +60,33 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
 
-model_choice = "t5-3b"
-tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
-model_encoding = T5EncoderModel.from_pretrained(model_choice)
-embedding_size = 1024
+#model_choice = "t5-3b"
+#tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
+#model_encoding = T5EncoderModel.from_pretrained(model_choice)
+#embedding_size = 1024
+#for param in model_encoding.parameters():
+#    param.requires_grad = False
 
 #model_choice = 'bert-base-uncased'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice)
 #model_encoding = BertModel.from_pretrained(model_choice)
 #embedding_size = 768
+#for param in model_encoding.parameters():
+#    param.requires_grad = False
 
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-#model_encoding = AutoModel.from_pretrained(model_choice)
-#embedding_size = 768
+model_choice = 'allenai/scibert_scivocab_uncased'
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+model_encoding = AutoModel.from_pretrained(model_choice)
+embedding_size = 768
+for param in model_encoding.parameters():
+    param.requires_grad = False
 
 #model_choice = 'hivemind/gpt-j-6B-8bit'
 #tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6B")
 #model_encoding = BertModel.from_pretrained(model_choice)
 #embedding_size = 4096
+#for param in model_encoding.parameters():
+#    param.requires_grad = False
 
 
 
@@ -156,8 +165,8 @@ for dataset in classification_datasets:
 
     print("Loading Model")
 
-    train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=6)
-    eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=6)
+    train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=8)
+    eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=8)
 
     print("Number of labels: " + str(len(set(train_set_label))))
 
@@ -169,20 +178,19 @@ for dataset in classification_datasets:
     ############################################################
 
 
-    optimizer = AdamW(model.parameters(), lr=5e-5)
+    #optimizer = AdamW(model.parameters(), lr=5e-5)
+
+    #lr_scheduler = get_scheduler(
+    #    name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
+    #)
 
     num_epochs = 3
     num_training_steps = num_epochs * len(train_dataloader)
-    lr_scheduler = get_scheduler(
-        name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
-    )
-
-    ############################################################
 
     import torch.optim as optim
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+    optimizer = optim.Adam(model.parameters(), lr=2e-5)
 
     ############################################################
 

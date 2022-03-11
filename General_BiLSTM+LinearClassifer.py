@@ -168,8 +168,8 @@ for dataset in classification_datasets:
 
     print("Loading Model")
 
-    train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=6)
-    eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=6)
+    train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=8)
+    eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=8)
 
     print("Number of labels: " + str(len(set(train_set_label))))
 
@@ -181,20 +181,19 @@ for dataset in classification_datasets:
     ############################################################
 
 
-    optimizer = AdamW(model.parameters(), lr=5e-5)
+    #optimizer = AdamW(model.parameters(), lr=5e-5)
+
+    #lr_scheduler = get_scheduler(
+    #    name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
+    #)
 
     num_epochs = 3
     num_training_steps = num_epochs * len(train_dataloader)
-    lr_scheduler = get_scheduler(
-        name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
-    )
-
-    ############################################################
 
     import torch.optim as optim
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+    optimizer = optim.Adam(model.parameters(), lr=2e-5)
 
     ############################################################
 
