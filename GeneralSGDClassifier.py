@@ -33,8 +33,6 @@ from sklearn.metrics import f1_score
 
 ############################################################
 
-print("With 0.5 dropout for frozen embeddings")
-
 class CustomBERTModel(nn.Module):
     def __init__(self, number_of_labels, encoder_model, embedding_size, dropout_layer):
           super(CustomBERTModel, self).__init__()
@@ -270,7 +268,7 @@ for dataset in classification_datasets:
     print("Train Model")
 
     linearModel = make_pipeline(StandardScaler(),
-                    SGDClassifier(loss="perceptron", learning_rate="optimal", max_iter=1000, tol=1e-3, random_state=0))
+                    SGDClassifier(loss="hinge", learning_rate="optimal", max_iter=1000, tol=1e-3, random_state=0))
 
     linearModel.fit(total_training_set, total_training_labels)
 
