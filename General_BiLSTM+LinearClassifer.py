@@ -1,7 +1,7 @@
 
 
 import torch.nn as nn
-from transformers import T5Tokenizer, T5EncoderModel
+from transformers import T5Tokenizer, T5EncoderModel, BertTokenizer
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
 
 import pandas as pd
@@ -23,7 +23,7 @@ from tqdm.auto import tqdm
 
 ############################################################
 
-print("0.5 dropout now")
+print("New checkpoint path, fixed yet again")
 
 class CustomBERTModel(nn.Module):
     def __init__(self, number_of_labels, encoder_model, embedding_size, dropout_layer):
@@ -34,14 +34,19 @@ class CustomBERTModel(nn.Module):
 
           #self.lstm = nn.LSTM(embedding_size, 256, batch_first=True,bidirectional=True, num_layers=2)
           #self.linear = nn.Linear(256*2, number_of_labels)
-          self.lstm = nn.LSTM(input_size=embedding_size, hidden_size=200, batch_first=True,bidirectional=True, num_layers=2)
+          self.lstm = nn.LSTM(input_size=embedding_size, hidden_size=200, batch_first=True, bidirectional=True, num_layers=2)
 
           self.perceptron = nn.Sequential(
-                          nn.Linear(200*2, 200),
+                          nn.Linear(400*2, 400),
                           nn.ReLU(),
-                          nn.Linear(200, 100),
+                          nn.Linear(400, 200),
                           nn.ReLU(),
-                          nn.Linear(100, number_of_labels)
+                          nn.Linear(200, 200),
+                          nn.ReLU(),
+                          #nn.Linear(200, 100),
+                          #nn.ReLU(),
+                          nn.Linear(200, number_of_labels)
+                          #nn.Linear(200, number_of_labels)
                         )
 
           self.embedding_size = embedding_size
@@ -57,16 +62,24 @@ class CustomBERTModel(nn.Module):
                attention_mask=mask)
 
           sequence_output = total_output['last_hidden_state']
+          pooler_output = total_output['pooler_output']
 
-          #dropout_layer = nn.Dropout(p=0.1)
-          #sequence_output = dropout_layer(sequence_output)
+          #print('pooler_output')
+          #print(type(pooler_output))
+          #print(pooler_output.shape)
+
+          if self.dropout_layer == True:
+              dropout_layer = nn.Dropout(p=0.5)
+              sequence_output = dropout_layer(sequence_output)
 
           lstm_output, (h,c) = self.lstm(sequence_output) ## extract the 1st token's embeddings
 
           #print("lstm_output")
           #print(lstm_output.shape)
 
-          hidden = torch.cat((lstm_output[:,-1, :200],lstm_output[:,0, 200:]),dim=-1)
+          hidden = torch.cat((lstm_output[:,-1, :],lstm_output[:,0, :]),dim=-1)
+          #hidden = torch.cat((lstm_output[:,-1, :200],lstm_output[:,0, 200:]),dim=-1)
+          #hidden = torch.cat((lstm_output[:,-1, :],lstm_output[:,0, :]),dim=-1)
 
           #print('hidden')
           #print(hidden.shape)
@@ -92,30 +105,34 @@ class CustomBERTModel(nn.Module):
 
 device = "cuda:0"
 
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
-#classification_datasets = ['chemprot']
+#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
+
+checkpoint_path = 'checkpoint1.pt'
+num_epochs = 1000 #1000 #10
+patience_value = 10 #10 #3
+current_dropout = False
 
 #model_choice = "t5-3b"
 #tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
 #model_encoding = T5EncoderModel.from_pretrained(model_choice)
 #embedding_size = 1024
-#current_dropout = False
+#for param in model_encoding.parameters():
+#    param.requires_grad = False
 
 #model_choice = 'bert-base-uncased'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice)
 #model_encoding = BertModel.from_pretrained(model_choice)
 #embedding_size = 768
-#current_dropout = False
 #for param in model_encoding.parameters():
 #    param.requires_grad = False
 
 model_choice = 'allenai/scibert_scivocab_uncased'
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-model_encoding = BertModel.from_pretrained(model_choice)
+tokenizer = AutoTokenizer.from_pretrained('allenai/scibert_scivocab_uncased', model_max_length=512)
+model_encoding = AutoModel.from_pretrained(model_choice)
 embedding_size = 768
-current_dropout = False
 for param in model_encoding.parameters():
     param.requires_grad = False
 
@@ -123,7 +140,6 @@ for param in model_encoding.parameters():
 #tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 #model_encoding = AutoModel.from_pretrained(model_choice)
 #embedding_size = 4096
-#current_dropout = False
 
 
 
@@ -180,16 +196,22 @@ for dataset in classification_datasets:
 
     ############################################################
 
-    training_dataset_pandas = pd.DataFrame({'label': train_set_label + dev_set_label, 'text': train_set_text + dev_set_text})#[:1000]
+    training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
     training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
     training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+
+    validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
+    validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
+    validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 
     test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
     test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
     test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
 
 
-    dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 'test' : test_dataset_arrow})
+    dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 
+                                    'validation': validation_dataset_arrow, 
+                                    'test' : test_dataset_arrow})
     tokenized_datasets = dataset.map(tokenize_function, batched=True)
 
 
@@ -203,6 +225,7 @@ for dataset in classification_datasets:
     print("Loading Model")
 
     train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=32)
+    validation_dataloader = DataLoader(tokenized_datasets['validation'], shuffle=True, batch_size=32)
     eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=32)
 
     print("Number of labels: " + str(len(set(train_set_label))))
@@ -217,27 +240,46 @@ for dataset in classification_datasets:
 
     #optimizer = AdamW(model.parameters(), lr=5e-5)
 
-    #lr_scheduler = get_scheduler(
-    #    name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
-    #)
-
     criterion = nn.CrossEntropyLoss()
     optimizer = AdamW(model.parameters(), lr=0.001)
 
-    num_epochs = 1
-    num_training_steps = num_epochs * len(train_dataloader)
     #lr_scheduler = get_scheduler(
     #    name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
     #)
 
     ############################################################
 
+
+
+    # to track the training loss as the model trains
+    train_losses = []
+    # to track the validation loss as the model trains
+    valid_losses = []
+    # to track the average training loss per epoch as the model trains
+    avg_train_losses = []
+    # to track the average validation loss per epoch as the model trains
+    avg_valid_losses = []
+
+
+    # import EarlyStopping
+    from pytorchtools import EarlyStopping
+    # initialize the early_stopping object
+    early_stopping = EarlyStopping(patience=patience_value, verbose=True, path=checkpoint_path)
+    #early_stopping = EarlyStopping(patience=10, verbose=True)
+
+    print("Checkpoint Path: " + checkpoint_path)
+
+
     print("Beginning Training")
 
-    progress_bar = tqdm(range(num_training_steps))
-
-    model.train()
     for epoch in range(num_epochs):
+
+        print("Current Epoch: " + str(epoch))
+
+        progress_bar = tqdm(range(len(train_dataloader)))
+
+
+        model.train()
         for batch in train_dataloader:
 
             #with torch.no_grad():
@@ -245,16 +287,8 @@ for dataset in classification_datasets:
                 batch = {k: v.to(device) for k, v in batch.items()}
                 labels = batch['labels']
 
-                #print("Batch")
-                #print(batch)
-                
                 new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
                 outputs = model(**new_batch)
-
-                #print("outputs")
-                #print(type(outputs))
-                #print((outputs.shape))
-                #print(outputs[0])
 
                 loss = criterion(outputs, labels)
 
@@ -263,6 +297,64 @@ for dataset in classification_datasets:
                 #lr_scheduler.step()
                 optimizer.zero_grad()
                 progress_bar.update(1)
+
+                train_losses.append(loss.item())
+
+
+        progress_bar = tqdm(range(len(validation_dataloader)))
+
+        model.eval()
+        for batch in validation_dataloader:
+
+            #with torch.no_grad():
+            
+                batch = {k: v.to(device) for k, v in batch.items()}
+                labels = batch['labels']
+
+                new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+                outputs = model(**new_batch)
+
+                loss = criterion(outputs, labels)
+                progress_bar.update(1)
+
+                valid_losses.append(loss.item())
+
+
+        # print training/validation statistics 
+        # calculate average loss over an epoch
+        train_loss = np.average(train_losses)
+        valid_loss = np.average(valid_losses)
+        avg_train_losses.append(train_loss)
+        avg_valid_losses.append(valid_loss)
+        
+        epoch_len = len(str(num_epochs))
+        
+        print_msg = (f'[{epoch:>{epoch_len}}/{num_epochs:>{epoch_len}}] ' +
+                     f'train_loss: {train_loss:.5f} ' +
+                     f'valid_loss: {valid_loss:.5f}')
+        
+        print(print_msg)
+        
+        # clear lists to track next epoch
+        train_losses = []
+        valid_losses = []
+        
+        # early_stopping needs the validation loss to check if it has decresed, 
+        # and if it has, it will make a checkpoint of the current model
+        early_stopping(valid_loss, model)
+        
+        if early_stopping.early_stop:
+            print("Early stopping")
+            break
+
+
+
+    ############################################################
+
+    print("Loading the Best Model")
+
+    model.load_state_dict(torch.load(checkpoint_path))
+
 
 
     ############################################################
@@ -275,7 +367,7 @@ for dataset in classification_datasets:
     total_predictions = torch.FloatTensor([]).to(device)
     total_references = torch.FloatTensor([]).to(device)
 
-    progress_bar = tqdm(range(num_training_steps))
+    progress_bar = tqdm(range(len(eval_dataloader)))
 
     for batch in eval_dataloader:
 
@@ -304,13 +396,14 @@ for dataset in classification_datasets:
     print(total_predictions.shape)
     print(total_references.shape)
 
-    results = metric.compute(references=total_predictions, predictions=total_references)
-    print("Accuracy for Test Set: " + str(results['accuracy']))
-
     f_1_metric = load_metric("f1")
-    f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
-    print("F1 for Test Set: " + str(f_1_results['f1']))
+    macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
+    print("Macro F1 for Test Set: " + str(macro_f_1_results['f1']))
+    micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
+    print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']))
 
 
 
 
+
+    

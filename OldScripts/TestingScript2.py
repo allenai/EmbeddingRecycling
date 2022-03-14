@@ -23,7 +23,7 @@ from tqdm.auto import tqdm
 
 ############################################################
 
-print("0.5 dropout now")
+print("New checkpoint path, fixed yet again")
 
 class CustomBERTModel(nn.Module):
     def __init__(self, number_of_labels, encoder_model, embedding_size, dropout_layer):
@@ -58,8 +58,9 @@ class CustomBERTModel(nn.Module):
 
           sequence_output = total_output['last_hidden_state']
 
-          #dropout_layer = nn.Dropout(p=0.5)
-          #sequence_output = dropout_layer(sequence_output)
+          if self.dropout_layer == True:
+              dropout_layer = nn.Dropout(p=0.5)
+              sequence_output = dropout_layer(sequence_output)
 
           lstm_output, (h,c) = self.lstm(sequence_output) ## extract the 1st token's embeddings
 
@@ -97,33 +98,33 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
 
+checkpoint_path = 'checkpoint1.pt'
+patience_value = 10
+current_dropout = True
+
 #model_choice = "t5-3b"
 #tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
 #model_encoding = T5EncoderModel.from_pretrained(model_choice)
 #embedding_size = 1024
-#current_dropout = False
 
-#model_choice = 'bert-base-uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-#model_encoding = BertModel.from_pretrained(model_choice)
-#embedding_size = 768
-#current_dropout = False
-#for param in model_encoding.parameters():
-#    param.requires_grad = False
-
-model_choice = 'allenai/scibert_scivocab_uncased'
-tokenizer = AutoTokenizer.from_pretrained('allenai/scibert_scivocab_uncased', model_max_length=512)
+model_choice = 'bert-base-uncased'
+tokenizer = AutoTokenizer.from_pretrained(model_choice)
 model_encoding = BertModel.from_pretrained(model_choice)
 embedding_size = 768
-current_dropout = False
 for param in model_encoding.parameters():
     param.requires_grad = False
+
+#model_choice = 'allenai/scibert_scivocab_uncased'
+#tokenizer = AutoTokenizer.from_pretrained('allenai/scibert_scivocab_uncased', model_max_length=512)
+#model_encoding = BertModel.from_pretrained(model_choice)
+#embedding_size = 768
+#for param in model_encoding.parameters():
+#    param.requires_grad = False
 
 #model_choice = 'hivemind/gpt-j-6B-8bit'
 #tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 #model_encoding = AutoModel.from_pretrained(model_choice)
 #embedding_size = 4096
-#current_dropout = False
 
 
 
@@ -252,7 +253,10 @@ for dataset in classification_datasets:
     # import EarlyStopping
     from pytorchtools import EarlyStopping
     # initialize the early_stopping object
-    early_stopping = EarlyStopping(patience=10, verbose=True)
+    early_stopping = EarlyStopping(patience=patience_value, verbose=True, path=checkpoint_path)
+    #early_stopping = EarlyStopping(patience=10, verbose=True)
+
+    print("Checkpoint Path: " + checkpoint_path)
 
 
     print("Beginning Training")
@@ -340,7 +344,7 @@ for dataset in classification_datasets:
 
     print("Loading the Best Model")
 
-    model.load_state_dict(torch.load('checkpoint.pt'))
+    model.load_state_dict(torch.load(checkpoint_path))
 
 
 
@@ -389,3 +393,9 @@ for dataset in classification_datasets:
     f_1_metric = load_metric("f1")
     f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
     print("F1 for Test Set: " + str(f_1_results['f1']))
+
+
+
+
+
+    
