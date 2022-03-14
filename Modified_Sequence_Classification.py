@@ -1,8 +1,6 @@
 
-
-import torch.nn as nn
-from transformers import T5Tokenizer, T5EncoderModel, BertTokenizer
-from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
+from transformers import AutoTokenizer
+from transformers import AutoModelForSequenceClassification, BertForSequenceClassification
 
 import pandas as pd
 import numpy as np
@@ -21,140 +19,17 @@ from transformers import get_scheduler
 import torch
 from tqdm.auto import tqdm
 
-############################################################
-
-print("New checkpoint path, fixed yet again")
-
-class CustomBERTModel(nn.Module):
-    def __init__(self, number_of_labels, encoder_model, embedding_size, dropout_layer):
-          super(CustomBERTModel, self).__init__()
-          #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
-          self.encoderModel = encoder_model
-          ### New layers:
-
-          #self.lstm = nn.LSTM(embedding_size, 256, batch_first=True,bidirectional=True, num_layers=2)
-          #self.linear = nn.Linear(256*2, number_of_labels)
-          self.lstm = nn.LSTM(input_size=embedding_size, hidden_size=200, batch_first=True, bidirectional=True, num_layers=2)
-
-          self.perceptron = nn.Sequential(
-                          nn.Linear(200*2, 200),
-                          nn.ReLU(),
-                          #nn.Linear(400, 200),
-                          #nn.ReLU(),
-                          nn.Linear(200, 200),
-                          #nn.Dropout(p=0.5),
-                          #nn.Linear(200, 100),
-                          nn.ReLU(),
-                          nn.Linear(200, number_of_labels)
-                          #nn.Linear(200, number_of_labels)
-                        )
-
-          self.embedding_size = embedding_size
-          self.dropout_layer = dropout_layer
-
-
-          
-
-    def forward(self, ids, mask):
-          
-          total_output = self.encoderModel(
-               ids, 
-               attention_mask=mask)
-
-          sequence_output = total_output['last_hidden_state']
-          pooler_output = total_output['pooler_output']
-
-          #print('pooler_output')
-          #print(type(pooler_output))
-          #print(pooler_output.shape)
-
-          if self.dropout_layer == True:
-              dropout_layer = nn.Dropout(p=0.5)
-              sequence_output = dropout_layer(sequence_output)
-
-          lstm_output, (h,c) = self.lstm(sequence_output) ## extract the 1st token's embeddings
-
-          #print("lstm_output")
-          #print(lstm_output.shape)
-
-          hidden = torch.cat((lstm_output[:,-1, :200],lstm_output[:,0, 200:]),dim=-1)
-          #hidden = torch.cat((lstm_output[:,-1, :200],lstm_output[:,0, 200:]),dim=-1)
-          #hidden = torch.cat((lstm_output[:,-1, :],lstm_output[:,0, :]),dim=-1)
-
-          #print('hidden')
-          #print(hidden.shape)
-
-          linear_output = self.perceptron(hidden)
-
-          #print('linear_output')
-          #print(linear_output.shape)
-
-          #hidden = torch.cat((lstm_output[:,-1, :256],lstm_output[:,0, 256:]),dim=-1)
-
-          #if self.dropout_layer == True:
-          #  print("Performing dropout")
-          #  dropout_layer = nn.Dropout(p=0.5)
-          #  hidden = dropout_layer(hidden)
-          
-          #linear_output = self.linear(hidden.view(-1,256*2)) ### assuming that you are only using the output of the last LSTM cell to perform classification
-
-          return linear_output
-
-
-############################################################
-
 device = "cuda:0"
 
 classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
-#classification_datasets = ['sci-cite']
-#classification_datasets = ['sciie-relation-extraction']
+model_choice = "allenai/scibert_scivocab_uncased"
 
-checkpoint_path = 'checkpoint11.pt'
-num_epochs = 1000 #1000 #10
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+checkpoint_path = 'checkpoint10.pt'
+num_epochs = 100 #1000 #10
 patience_value = 10 #10 #3
-current_dropout = True
-
-#model_choice = "t5-3b"
-#tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
-#model_encoding = T5EncoderModel.from_pretrained(model_choice)
-#embedding_size = 1024
-#for param in model_encoding.parameters():
-#    param.requires_grad = False
-
-#model_choice = 'bert-base-uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-#model_encoding = BertModel.from_pretrained(model_choice)
-#embedding_size = 768
-#for param in model_encoding.parameters():
-#    param.requires_grad = False
-
-
-
-#scibert_config = AutoModel.config()
-
-model_choice = 'allenai/scibert_scivocab_uncased'
-tokenizer = AutoTokenizer.from_pretrained('allenai/scibert_scivocab_uncased', 
-                                          model_max_length=512)
-                                          #attention_probs_dropout_prob=0.5)
-                                          #hidden_dropout_prob=0.5)
-model_encoding = AutoModel.from_pretrained(model_choice)
-embedding_size = 768
-for param in model_encoding.parameters():
-    param.requires_grad = False
-
-
-
-
-
-
-
-#model_choice = 'hivemind/gpt-j-6B-8bit'
-#tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-#model_encoding = AutoModel.from_pretrained(model_choice)
-#embedding_size = 4096
-
-
 
 ############################################################
 
@@ -167,7 +42,7 @@ def tokenize_function(examples):
 
 for dataset in classification_datasets:
 
-    print("Processing " + dataset + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
+    print("Processing " + dataset + " using " + model_choice + " with patience " + str(patience_value) + " on " + str(num_epochs) + " epochs.")
 
     # Chemprot train, dev, and test
     with open('text_classification/' + dataset + '/train.txt') as f:
@@ -241,19 +116,22 @@ for dataset in classification_datasets:
     validation_dataloader = DataLoader(tokenized_datasets['validation'], shuffle=True, batch_size=32)
     eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=32)
 
-    print("Number of labels: " + str(len(set(train_set_label))))
 
-    model = CustomBERTModel(len(set(train_set_label)), model_encoding, embedding_size, current_dropout)
+
+    model = BertForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
+    for param in model.bert.parameters():
+    	param.requires_grad = False
 
     device = torch.device("cuda:0")
     model.to(device)
+
+    print("Number of labels: " + str(len(set(train_set_label))))
 
     ############################################################
 
 
     #optimizer = AdamW(model.parameters(), lr=5e-5)
 
-    criterion = nn.CrossEntropyLoss()
     optimizer = AdamW(model.parameters(), lr=0.001)
 
     #lr_scheduler = get_scheduler(
@@ -300,10 +178,9 @@ for dataset in classification_datasets:
                 batch = {k: v.to(device) for k, v in batch.items()}
                 labels = batch['labels']
 
-                new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-                outputs = model(**new_batch)
+                outputs = model(**batch)
 
-                loss = criterion(outputs, labels)
+                loss = outputs.loss
 
                 loss.backward()
                 optimizer.step()
@@ -324,10 +201,9 @@ for dataset in classification_datasets:
                 batch = {k: v.to(device) for k, v in batch.items()}
                 labels = batch['labels']
 
-                new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-                outputs = model(**new_batch)
+                outputs = model(**batch)
 
-                loss = criterion(outputs, labels)
+                loss = outputs.loss
                 progress_bar.update(1)
 
                 valid_losses.append(loss.item())
@@ -389,11 +265,9 @@ for dataset in classification_datasets:
             batch = {k: v.to(device) for k, v in batch.items()}
             labels = batch['labels']
 
-            new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+            outputs = model(**batch)
 
-            outputs = model(**new_batch)
-
-            logits = outputs
+            logits = outputs.logits
             predictions = torch.argmax(logits, dim=-1)
             metric.add_batch(predictions=predictions, references=labels)
 
@@ -419,4 +293,5 @@ for dataset in classification_datasets:
 
 
 
-    
+
+
