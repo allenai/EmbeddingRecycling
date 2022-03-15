@@ -118,9 +118,9 @@ for dataset in classification_datasets:
 
 
 
-    model = BertForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
-    for param in model.bert.parameters():
-    	param.requires_grad = False
+    model = AutoModelForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
+    #for param in model.bert.parameters():
+    #	param.requires_grad = False
 
     device = torch.device("cuda:0")
     model.to(device)
@@ -132,7 +132,7 @@ for dataset in classification_datasets:
 
     #optimizer = AdamW(model.parameters(), lr=5e-5)
 
-    optimizer = AdamW(model.parameters(), lr=0.001)
+    optimizer = AdamW(model.parameters(), lr=5e-5)
 
     #lr_scheduler = get_scheduler(
     #    name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
@@ -282,6 +282,9 @@ for dataset in classification_datasets:
     print("Predictions Shapes")
     print(total_predictions.shape)
     print(total_references.shape)
+
+    results = metric.compute(references=total_predictions, predictions=total_references)
+    print("Results for Test Set: " + str(results['accuracy']))
 
     f_1_metric = load_metric("f1")
     macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
