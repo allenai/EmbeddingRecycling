@@ -1,0 +1,55 @@
+
+from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+from transformers import T5Tokenizer, T5EncoderModel
+
+tokenizer = T5Tokenizer.from_pretrained('t5-3b', model_max_length=512)
+model_encoding = T5EncoderModel.from_pretrained('t5-3b')
+
+#for parameter in model_encoding.parameters():
+#	print(type(parameter))
+
+print(set([type(parameter) for parameter in model_encoding.parameters()]))
+print(len([type(parameter) for parameter in model_encoding.parameters()]))
+
+
+
+
+
+
+
+
+
+# from transformers import GPT2LMHeadModel, GPT2TokenizerFast
+# from transformers import T5Tokenizer, T5EncoderModel
+
+# import torch
+# import torch.nn as nn
+
+# from soft_embedding import SoftEmbedding
+
+# n_tokens = 20
+# initialize_from_vocab = True
+
+# #tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
+# #model = GPT2LMHeadModel.from_pretrained('gpt2')
+
+# tokenizer = T5Tokenizer.from_pretrained('t5-3b', model_max_length=512)
+# model_encoding = T5EncoderModel.from_pretrained('t5-3b')
+
+# s_wte = SoftEmbedding(model_encoding.get_input_embeddings(), 
+#                       n_tokens=n_tokens, 
+#                       initialize_from_vocab=initialize_from_vocab)
+
+# model_encoding.set_input_embeddings(s_wte)
+
+# inputs = tokenizer("May the force be", return_tensors="pt")
+
+# # need to pad attention_mask and input_ids to be full seq_len + n_learned_tokens
+# # even though it does not matter what you pad input_ids with, it's just to make HF happy
+# inputs['input_ids'] = torch.cat([torch.full((1,n_tokens), 50256), inputs['input_ids']], 1)
+# inputs['attention_mask'] = torch.cat([torch.full((1,n_tokens), 1), inputs['attention_mask']], 1)
+
+# outputs = model_encoding(**inputs)
+
+# print(type(outputs['last_hidden_state']))
+# print(outputs['last_hidden_state'].shape)

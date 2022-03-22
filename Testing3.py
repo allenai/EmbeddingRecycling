@@ -156,8 +156,7 @@ current_dropout = True
 current_relu = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001 
-                            #1e-5 used for RoBERTa
+chosen_learning_rate = 5e-5 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 
 
 #checkpoint_path = 'checkpoint51.pt'
@@ -170,18 +169,18 @@ chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint72.pt'
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+checkpoint_path = 'checkpoint71.pt'
+model_choice = 't5-3b'
+assigned_batch_size = 32
+tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
                                              #attention_probs_dropout_prob=0.5)
                                                       #hidden_dropout_prob=0.5)
 
 
-checkpoint_path = 'checkpoint88.pt' #'checkpoint86.pt' #'checkpoint84.pt'
-model_choice = 'roberta-large'
-assigned_batch_size = 1
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+#checkpoint_path = 'checkpoint84.pt'
+#model_choice = 'roberta-large'
+#assigned_batch_size = 1
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 
 #model_choice = 'hivemind/gpt-j-6B-8bit'
@@ -195,13 +194,13 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 def tokenize_function(examples):
 
-    return tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
+    return tokenizer(examples["text"])#.input_ids
 
 ############################################################
 
-for dataset in classification_datasets:
+execution_start = time.time()
 
-    execution_start = time.time()
+for dataset in classification_datasets:
 
     print("Dataset: " + dataset)
     print("Model: " + model_choice)
@@ -212,7 +211,6 @@ for dataset in classification_datasets:
     print('Learning Rate: ' + str(chosen_learning_rate))
     print("Number of Epochs: " + str(num_epochs))
     print("Checkpoint Path: " + checkpoint_path)
-    print("Patience: " + str(patience_value))
 
     # Chemprot train, dev, and test
     with open('text_classification/' + dataset + '/train.txt') as f:
@@ -273,227 +271,14 @@ for dataset in classification_datasets:
     tokenized_datasets = classification_dataset.map(tokenize_function, batched=True)
 
 
-    tokenized_datasets = tokenized_datasets.remove_columns(["text"])
-    tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
-    tokenized_datasets.set_format("torch")
+    print(max([len(tokens) for tokens in tokenized_datasets['train']['input_ids']]))
+    print(max([len(tokens) for tokens in tokenized_datasets['validation']['input_ids']]))
+    print(max([len(tokens) for tokens in tokenized_datasets['test']['input_ids']]))
 
 
-    ############################################################
+    #print("tokenized_datasets")
+    #print(tokenized_datasets['train']['input_ids'])
 
-    print("Loading Model")
 
-    micro_averages = []
-    macro_averages = []
-    inference_times = []
 
-    for i in range(0, number_of_runs):
 
-        train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=32)
-        validation_dataloader = DataLoader(tokenized_datasets['validation'], shuffle=True, batch_size=32)
-        eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=32)
-
-        print("Number of labels: " + str(len(set(train_set_label))))
-
-
-        model = CustomBERTModel(len(set(train_set_label)), model_choice, current_dropout, frozen_choice, current_relu)
-
-        device = torch.device("cuda:0")
-        model.to(device)
-
-        ############################################################
-
-
-        #optimizer = AdamW(model.parameters(), lr=5e-5)
-
-        criterion = nn.CrossEntropyLoss()
-        #optimizer = AdamW(model.parameters(), lr=5e-5)
-        optimizer = Adam(model.parameters(), lr=chosen_learning_rate) 
-
-        #lr_scheduler = get_scheduler(
-        #    name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
-        #)
-
-        ############################################################
-
-
-
-        # to track the training loss as the model trains
-        train_losses = []
-        # to track the validation loss as the model trains
-        valid_losses = []
-        # to track the average training loss per epoch as the model trains
-        avg_train_losses = []
-        # to track the average validation loss per epoch as the model trains
-        avg_valid_losses = []
-
-
-        # import EarlyStopping
-        from pytorchtools import EarlyStopping
-        # initialize the early_stopping object
-        early_stopping = EarlyStopping(patience=patience_value, verbose=True, path=checkpoint_path)
-        #early_stopping = EarlyStopping(patience=10, verbose=True)
-
-        
-
-        print("Beginning Training")
-
-        for epoch in range(num_epochs):
-
-            print("Current Epoch: " + str(epoch))
-
-            progress_bar = tqdm(range(len(train_dataloader)))
-
-
-            model.train()
-            for batch in train_dataloader:
-
-                #with torch.no_grad():
-                
-                    batch = {k: v.to(device) for k, v in batch.items()}
-                    labels = batch['labels']
-
-                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-                    outputs = model(**new_batch)
-
-                    loss = criterion(outputs, labels)
-
-                    loss.backward()
-                    optimizer.step()
-                    #lr_scheduler.step()
-                    optimizer.zero_grad()
-                    progress_bar.update(1)
-
-                    train_losses.append(loss.item())
-
-
-            progress_bar = tqdm(range(len(validation_dataloader)))
-
-            model.eval()
-            for batch in validation_dataloader:
-
-                #with torch.no_grad():
-                
-                    batch = {k: v.to(device) for k, v in batch.items()}
-                    labels = batch['labels']
-
-                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-                    outputs = model(**new_batch)
-
-                    loss = criterion(outputs, labels)
-                    progress_bar.update(1)
-
-                    valid_losses.append(loss.item())
-
-
-            # print training/validation statistics 
-            # calculate average loss over an epoch
-            train_loss = np.average(train_losses)
-            valid_loss = np.average(valid_losses)
-            avg_train_losses.append(train_loss)
-            avg_valid_losses.append(valid_loss)
-            
-            epoch_len = len(str(num_epochs))
-            
-            print_msg = (f'[{epoch:>{epoch_len}}/{num_epochs:>{epoch_len}}] ' +
-                         f'train_loss: {train_loss:.5f} ' +
-                         f'valid_loss: {valid_loss:.5f}')
-            
-            print(print_msg)
-            
-            # clear lists to track next epoch
-            train_losses = []
-            valid_losses = []
-            
-            # early_stopping needs the validation loss to check if it has decresed, 
-            # and if it has, it will make a checkpoint of the current model
-            early_stopping(valid_loss, model)
-            
-            if early_stopping.early_stop:
-                print("Early stopping")
-                break
-
-
-
-        ############################################################
-
-        print("Loading the Best Model")
-
-        model.load_state_dict(torch.load(checkpoint_path))
-
-
-
-        ############################################################
-
-        print("Beginning Evaluation")
-
-        metric = load_metric("accuracy")
-        #model.eval()
-
-        total_predictions = torch.FloatTensor([]).to(device)
-        total_references = torch.FloatTensor([]).to(device)
-
-        progress_bar = tqdm(range(len(eval_dataloader)))
-
-        inference_start = time.time()
-
-        for batch in eval_dataloader:
-
-            with torch.no_grad():
-
-                batch = {k: v.to(device) for k, v in batch.items()}
-                labels = batch['labels']
-
-                new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-
-                outputs = model(**new_batch)
-
-                logits = outputs
-                predictions = torch.argmax(logits, dim=-1)
-                metric.add_batch(predictions=predictions, references=labels)
-
-                total_predictions = torch.cat((total_predictions, predictions), 0)
-                total_references = torch.cat((total_references, labels), 0)
-
-                progress_bar.update(1)
-
-
-
-        inference_end = time.time()
-        total_inference_time = inference_end - inference_start
-        inference_times.append(total_inference_time)
-
-        ############################################################
-
-        print("--------------------------")
-        print("Predictions Shapes")
-        print(total_predictions.shape)
-        print(total_references.shape)
-
-        f_1_metric = load_metric("f1")
-        macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
-        print("Macro F1 for Test Set: " + str(macro_f_1_results['f1']))
-        micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
-        print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']))
-
-        micro_averages.append(micro_f_1_results['f1'])
-        macro_averages.append(macro_f_1_results['f1'])
-
-    
-
-    print("Processing " + dataset + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
-    print('micro_averages: ' + str(micro_averages))
-    print("Micro F1 Average: " + str(statistics.mean(micro_averages)))
-    if len(micro_averages) > 1:
-        print("Micro F1 Standard Variation: " + str(statistics.stdev(micro_averages)))
-
-    print('macro_averages: ' + str(macro_averages))
-    print("Macro F1 Average: " + str(statistics.mean(macro_averages)))
-    if len(macro_averages) > 1:
-        print("Macro F1 Standard Variation: " + str(statistics.stdev(macro_averages)))
-
-    print("Inference Time Average: " + str(statistics.mean(inference_times)))
-    print("Dataset Execution Run Time: " + str(time.time() - execution_start))
-
-
-
-    
