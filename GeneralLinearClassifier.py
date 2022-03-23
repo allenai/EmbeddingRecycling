@@ -70,17 +70,21 @@ class CustomBERTModel(nn.Module):
             if model_choice == "t5-3b":
 
                 print("Freezing T5-3b")
+                print("Number of Layers: " + str(len(self.encoderModel.encoder.block)))
 
-                count = 0
-                for param in self.encoderModel.encoder.parameters():
+                for parameter in self.encoderModel.parameters():
+                    parameter.requires_grad = False
 
-                    if count < frozen_layer_count:
-                        param.requires_grad = False
-                    count += 1
+                for i, m in enumerate(self.encoderModel.encoder.block):        
+                    #Only un-freeze the last n transformer blocks
+                    if i+1 > 24 - frozen_layer_count:
+                        print(str(i) + " Layer")
+                        for parameter in m.parameters():
+                            parameter.requires_grad = True
 
             else:
 
-                print("Number of Layers: " + str(len(list(self.encoderModel.encoder.parameters()))))
+                print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
 
                 layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
                 for module in layers_to_freeze:
@@ -113,7 +117,6 @@ class CustomBERTModel(nn.Module):
           
           if model_choice == "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune":
 
-              #print("Loading decoder_input_ids")
               total_output = self.encoderModel(
                    input_ids=ids,
                    decoder_input_ids=ids, 
@@ -128,15 +131,7 @@ class CustomBERTModel(nn.Module):
           #pooler_output = total_output['pooler_output']
           sequence_output = total_output['last_hidden_state']
 
-          #print('sequence_output')
-          #print(dir(total_output))
-          #print(sequence_output.shape)
-
           if self.average_hidden_state == True:
-
-            #print('sequence_output')
-            #print(sequence_output.shape)
-            #print(torch.mean(sequence_output, dim=1).shape)
 
             sequence_output = torch.mean(sequence_output, dim=1)
             linear1_output = self.linear1(sequence_output)
@@ -163,21 +158,21 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
 
-num_epochs = 100 #1000 #10
-patience_value = 10 #10 #3
+num_epochs = 5 #1000 #10
+patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate = 0.001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 0 #12 layers for BERT total, 195 transformer layers for T5
+chosen_learning_rate = 5e-5 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
+frozen_layers = 12 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 
  
-#checkpoint_path = 'checkpoint14.pt' #'checkpoint11.pt' #'checkpoint13.pt' 'checkpoint12.pt'
-#model_choice = "t5-3b"
-#assigned_batch_size = 2
-#tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
+checkpoint_path = 'checkpoint14.pt' #'checkpoint11.pt' #'checkpoint13.pt' 'checkpoint12.pt'
+model_choice = "t5-3b"
+assigned_batch_size = 2
+tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #checkpoint_path = 'checkpoint22.pt'
 #model_choice = 'bert-base-uncased'
@@ -189,7 +184,7 @@ average_hidden_state = False
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint46.pt' #'checkpoint48.pt' #'checkpoint49.pt' #'checkpoint47.pt' #'checkpoint45.pt' #'checkpoint44.pt'
+#checkpoint_path = 'checkpoint40.pt' # 'checkpoint48.pt' #'checkpoint46.pt' #'checkpoint49.pt' #'checkpoint47.pt' #'checkpoint45.pt' #'checkpoint44.pt'
 #model_choice = 'roberta-large'
 #assigned_batch_size = 8
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -199,10 +194,10 @@ average_hidden_state = False
 #assigned_batch_size = 32
 #tokenizer = SentenceTransformer(model_choice, device='cuda').tokenizer 
 
-checkpoint_path = 'checkpoint207.pt' #'checkpoint205.pt' #'checkpoint44.pt'
-model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
-assigned_batch_size = 4
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+#checkpoint_path = 'checkpoint207.pt' #'checkpoint205.pt' #'checkpoint44.pt'
+#model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
+#assigned_batch_size = 4
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = 'hivemind/gpt-j-6B-8bit'
 #tokenizer = GPT2Tokenizer.from_pretrained("gpt2")

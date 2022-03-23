@@ -59,16 +59,15 @@ class CustomBERTModel(nn.Module):
 
                 print("Freezing T5-3b")
 
-                count = 0
-                for param in self.encoderModel.encoder.parameters():
-
-                    if count < frozen_layer_count:
+                layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
+                for module in layers_to_freeze:
+                    for param in module.parameters():
                         param.requires_grad = False
-                    count += 1
+
 
             else:
 
-                print("Number of Layers: " + str(len(list(self.encoderModel.encoder.parameters()))))
+                print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
 
                 layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
                 for module in layers_to_freeze:
@@ -142,8 +141,8 @@ patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate = 1e-5 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 96 #12 layers for BERT total, 195 transformer blocks for T5
+chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
+frozen_layers = 6 #12 layers for BERT total, 195 transformer blocks for T5
 frozen_embeddings = True
 
 average_hidden_state = False
@@ -164,7 +163,7 @@ average_hidden_state = False
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-checkpoint_path = 'checkpoint44.pt' #'checkpoint48.pt' #'checkpoint46.pt' 'checkpoint43.pt' #'checkpoint45.pt' #'checkpoint44.pt'
+checkpoint_path = 'checkpoint49.pt' #'checkpoint48.pt' #'checkpoint46.pt' 'checkpoint43.pt' #'checkpoint45.pt' #'checkpoint44.pt'
 model_choice = 'roberta-large'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
