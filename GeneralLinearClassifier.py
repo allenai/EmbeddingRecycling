@@ -24,6 +24,17 @@ from tqdm.auto import tqdm
 import statistics
 import time
 
+import subprocess as sp
+import os
+
+############################################################
+
+def get_gpu_memory():
+    command = "nvidia-smi --query-gpu=memory.free --format=csv"
+    memory_free_info = sp.check_output(command.split()).decode('ascii').split('\n')[:-1][1:]
+    memory_free_values = [int(x.split()[0]) for i, x in enumerate(memory_free_info)]
+    return memory_free_values
+
 ############################################################
 
 class CustomBERTModel(nn.Module):
@@ -158,18 +169,18 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
 
-num_epochs = 5 #1000 #10
+num_epochs = 20 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
 chosen_learning_rate = 5e-5 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 12 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_layers = 18 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 
  
-checkpoint_path = 'checkpoint14.pt' #'checkpoint11.pt' #'checkpoint13.pt' 'checkpoint12.pt'
+checkpoint_path = 'checkpoint18.pt' #11, 12, 13, 15, 17, 18
 model_choice = "t5-3b"
 assigned_batch_size = 2
 tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -184,7 +195,7 @@ tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint40.pt' # 'checkpoint48.pt' #'checkpoint46.pt' #'checkpoint49.pt' #'checkpoint47.pt' #'checkpoint45.pt' #'checkpoint44.pt'
+#checkpoint_path = 'checkpoint49.pt' # 'checkpoint48.pt' #'checkpoint45.pt' #'checkpoint46.pt' #'checkpoint47.pt' #'checkpoint45.pt' #'checkpoint44.pt'
 #model_choice = 'roberta-large'
 #assigned_batch_size = 8
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -215,6 +226,9 @@ def tokenize_function(examples):
 ############################################################
 
 for dataset in classification_datasets:
+
+    print("GPU Memory available at the start")
+    print(get_gpu_memory())
 
     execution_start = time.time()
 
@@ -452,11 +466,13 @@ for dataset in classification_datasets:
         total_predictions = torch.FloatTensor([]).to(device)
         total_references = torch.FloatTensor([]).to(device)
 
-        progress_bar = tqdm(range(len(eval_dataloader)))
-
         inference_start = time.time()
 
-        for batch in eval_dataloader:
+        #progress_bar = tqdm(range(len(eval_dataloader)))
+        #for batch in eval_dataloader:
+
+        progress_bar = tqdm(range(len(validation_dataloader)))
+        for batch in validation_dataloader:
 
             with torch.no_grad():
 
@@ -515,6 +531,9 @@ for dataset in classification_datasets:
 
     print("Inference Time Average: " + str(statistics.mean(inference_times)))
     print("Dataset Execution Run Time: " + str(time.time() - execution_start))
+
+    print("GPU Memory available at the end")
+    print(get_gpu_memory())
 
 
 

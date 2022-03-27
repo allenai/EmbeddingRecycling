@@ -131,7 +131,7 @@ frozen_embeddings = False
 average_hidden_state = False
 
 
-checkpoint_path = 'checkpoint105.pt' #'checkpoint44.pt'
+checkpoint_path = 'checkpoint205.pt' #'checkpoint44.pt'
 model_choice = 'sentence-transformers/sentence-t5-base'
 assigned_batch_size = 32
 tokenizer = SentenceTransformer(model_choice, device='cuda').tokenizer 
