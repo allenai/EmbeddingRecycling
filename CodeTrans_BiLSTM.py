@@ -151,7 +151,7 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
 
-num_epochs = 50 #1000 #10
+num_epochs = 10 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
@@ -191,6 +191,7 @@ for dataset in classification_datasets:
     print("Frozen Embeddings: " + str(frozen_embeddings))
     print("Patience: " + str(patience_value))
     print("Average Hidden Layers: " + str(average_hidden_state))
+    print("Number of Epochs: " + str(num_epochs))
 
     # Chemprot train, dev, and test
     with open('text_classification/' + dataset + '/train.txt') as f:

@@ -163,27 +163,28 @@ class CustomBERTModel(nn.Module):
 device = "cuda:0"
 device = torch.device(device)
 
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
-#classification_datasets = ['sciie-relation-extraction']
+classification_datasets = ['sciie-relation-extraction']
 
 num_epochs = 20 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
-frozen_choice = False
-chosen_learning_rate = 5e-5 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 18 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_choice = True
+chosen_learning_rate = 1e-5 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
+validation_set_scoring = False
 
  
-checkpoint_path = 'checkpoint18.pt' #11, 12, 13, 15, 17, 18
-model_choice = "t5-3b"
-assigned_batch_size = 2
-tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
+#checkpoint_path = 'checkpoint17.pt' #11, 12, 13, 15, 17, 18
+#model_choice = "t5-3b"
+#assigned_batch_size = 2
+#tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #checkpoint_path = 'checkpoint22.pt'
 #model_choice = 'bert-base-uncased'
@@ -195,7 +196,7 @@ tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint49.pt' # 'checkpoint48.pt' #'checkpoint45.pt' #'checkpoint46.pt' #'checkpoint47.pt' #'checkpoint45.pt' #'checkpoint44.pt'
+#checkpoint_path = 'checkpoint42.pt' # 42, 43, 44, 45, 46, 47, 48, 49
 #model_choice = 'roberta-large'
 #assigned_batch_size = 8
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -205,10 +206,10 @@ tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
 #assigned_batch_size = 32
 #tokenizer = SentenceTransformer(model_choice, device='cuda').tokenizer 
 
-#checkpoint_path = 'checkpoint207.pt' #'checkpoint205.pt' #'checkpoint44.pt'
-#model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
-#assigned_batch_size = 4
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+checkpoint_path = 'checkpoint208.pt' #'checkpoint205.pt' #'checkpoint44.pt'
+model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
+assigned_batch_size = 4
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = 'hivemind/gpt-j-6B-8bit'
 #tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
@@ -230,6 +231,15 @@ for dataset in classification_datasets:
     print("GPU Memory available at the start")
     print(get_gpu_memory())
 
+    #print("Actual memory usage")
+    #from pynvml import *
+    #nvmlInit()
+    #h = nvmlDeviceGetHandleByIndex(0)
+    #info = nvmlDeviceGetMemoryInfo(h)
+    #print(f'total    : {info.total}')
+    #print(f'free     : {info.free}')
+    #print(f'used     : {info.used}')
+
     execution_start = time.time()
 
     print("Dataset: " + dataset)
@@ -243,6 +253,8 @@ for dataset in classification_datasets:
     print("Frozen Embeddings: " + str(frozen_embeddings))
     print("Patience: " + str(patience_value))
     print("Average Hidden Layers: " + str(average_hidden_state))
+    print("Validation Set Choice: " + str(validation_set_scoring))
+    print("Number of Epochs: " + str(num_epochs))
 
     # Chemprot train, dev, and test
     with open('text_classification/' + dataset + '/train.txt') as f:
@@ -471,8 +483,14 @@ for dataset in classification_datasets:
         #progress_bar = tqdm(range(len(eval_dataloader)))
         #for batch in eval_dataloader:
 
-        progress_bar = tqdm(range(len(validation_dataloader)))
-        for batch in validation_dataloader:
+        set_for_testing = eval_dataloader
+
+        if validation_set_scoring == True:
+            print("Using validation set for scoring")
+            set_for_testing = validation_dataloader
+
+        progress_bar = tqdm(range(len(set_for_testing)))
+        for batch in set_for_testing:
 
             with torch.no_grad():
 

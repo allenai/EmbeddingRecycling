@@ -1,8 +1,8 @@
 
-
 import torch.nn as nn
-from transformers import T5Tokenizer, T5EncoderModel, BertTokenizer
+from transformers import T5Tokenizer, T5EncoderModel
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
+import tensorflow as tf
 
 import pandas as pd
 import numpy as np
@@ -23,187 +23,206 @@ from tqdm.auto import tqdm
 import statistics
 import time
 
+import subprocess as sp
+import os
+
 ############################################################
 
-print("New checkpoint path, fixed yet again")
+def get_gpu_memory():
+    command = "nvidia-smi --query-gpu=memory.free --format=csv"
+    memory_free_info = sp.check_output(command.split()).decode('ascii').split('\n')[:-1][1:]
+    memory_free_values = [int(x.split()[0]) for i, x in enumerate(memory_free_info)]
+    return memory_free_values
+
+############################################################
 
 class CustomBERTModel(nn.Module):
-    def __init__(self, number_of_labels, model_choice, dropout_layer, frozen, relu):
-          super(CustomBERTModel, self).__init__()
+    def __init__(self, number_of_labels, model_choice, dropout_layer, frozen, 
+                 frozen_layer_count, average_hidden_state, frozen_embeddings):
 
+          super(CustomBERTModel, self).__init__()
+          #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
           if model_choice == "t5-3b":
 
             model_encoding = T5EncoderModel.from_pretrained(model_choice)
-            self.embedding_size = 1024
+            embedding_size = 1024
             self.encoderModel = model_encoding
 
           elif model_choice == "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune":
 
             model_encoding = AutoModel.from_pretrained(model_choice)
-            self.embedding_size = 1024
+            embedding_size = 1024
             self.encoderModel = model_encoding
 
           elif model_choice == "roberta-large":
 
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            self.embedding_size = 1024
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+            embedding_size = 1024
             self.encoderModel = model_encoding
 
           else:
 
             model_encoding = AutoModel.from_pretrained(model_choice)
-            self.embedding_size = 768
+            embedding_size = 768
             self.encoderModel = model_encoding
 
 
 
           if frozen == True:
+            print("Freezing the model parameters")
             for param in self.encoderModel.parameters():
                 param.requires_grad = False
 
 
+
+          if frozen_layer_count > 0:
+
+            if model_choice == "t5-3b":
+
+                print("Freezing T5-3b")
+                print("Number of Layers: " + str(len(self.encoderModel.encoder.block)))
+
+                for parameter in self.encoderModel.parameters():
+                    parameter.requires_grad = False
+
+                for i, m in enumerate(self.encoderModel.encoder.block):        
+                    #Only un-freeze the last n transformer blocks
+                    if i+1 > 24 - frozen_layer_count:
+                        print(str(i) + " Layer")
+                        for parameter in m.parameters():
+                            parameter.requires_grad = True
+
+            else:
+
+                print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
+
+                layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
+                for module in layers_to_freeze:
+                    for param in module.parameters():
+                        param.requires_grad = False
+
+
+
+          
+          if frozen_embeddings == True:
+            print("Frozen Embeddings Layer")
+            for param in self.encoderModel.embeddings.parameters():
+                param.requires_grad = False
+
+
+
+
+
           ### New layers:
+          self.linear1 = nn.Linear(embedding_size, 256)
+          self.linear2 = nn.Linear(256, number_of_labels)
 
-          #self.lstm = nn.LSTM(embedding_size, 256, batch_first=True,bidirectional=True, num_layers=2)
-          #self.linear = nn.Linear(256*2, number_of_labels)
-
-
-          self.lstm = nn.LSTM(input_size=self.embedding_size, hidden_size=200, batch_first=True, 
-                              bidirectional=True, num_layers=2, dropout=0.5)
-
-          if relu == True:
-
-            self.perceptron = nn.Sequential(
-                          nn.Linear(200*2, 200),
-                          nn.ReLU(),
-                          nn.Linear(200, number_of_labels)
-                          )
-
-          else:
-
-              self.perceptron = nn.Sequential(
-                              nn.Linear(200*2, 200),
-                              #nn.ReLU(),
-                              nn.Linear(200, number_of_labels)
+          self.embedding_size = embedding_size
+          self.average_hidden_state = average_hidden_state
+          self.number_of_hidden_layers = frozen_layer_count
 
 
-                              #nn.ReLU(),
-                              #nn.Linear(400, 200),
-                              #nn.ReLU(),
-                              #nn.Linear(200, 200),
-                              #nn.Dropout(p=0.5),
-                              #nn.Linear(200, 100),
-                              #nn.ReLU(),
-                              #nn.Linear(200, number_of_labels)
-                              #nn.Linear(200, number_of_labels)
-                        )
 
-          self.dropout_layer = dropout_layer
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+          #self.encoderModel.encoder.layer = self.encoderModel.encoder.layer[:24 - self.number_of_hidden_layers]
 
 
           
 
-    def forward(self, ids, mask):
+    def forward(self, inputs_embeds):
           
-          if model_choice == "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune":
-
-              total_output = self.encoderModel(
-                   input_ids=ids,
-                   decoder_input_ids=ids, 
-                   attention_mask=mask)
-
-          else:
-
-              total_output = self.encoderModel(
-                   ids, 
-                   attention_mask=mask)
+          total_output = self.encoderModel(inputs_embeds=inputs_embeds)
 
           sequence_output = total_output['last_hidden_state']
-          #pooler_output = total_output['pooler_output']
 
-          #print('pooler_output')
-          #print(type(pooler_output))
-          #print(pooler_output.shape)
+          if self.average_hidden_state == True:
 
-          if self.dropout_layer == True:
-              dropout_layer = nn.Dropout(p=0.5)
-              sequence_output = dropout_layer(sequence_output)
+            print("Averaging the hidden states")
 
-          lstm_output, (h,c) = self.lstm(sequence_output) ## extract the 1st token's embeddings
+            sequence_output = torch.mean(sequence_output, dim=1)
+            linear1_output = self.linear1(sequence_output)
 
-          #hidden = torch.cat((lstm_output[:,0, :],lstm_output[:,-1, :]),dim=-1)
-          hidden = torch.cat((lstm_output[:,-1, :200],lstm_output[:,0, 200:]),dim=-1)
-          #hidden = torch.cat((lstm_output[:,-1, :],lstm_output[:,0, :]),dim=-1)
+          else:
 
-          #print('hidden')
-          #print(hidden.shape)
+            linear1_output = self.linear1(sequence_output[:,0,:].view(-1, self.embedding_size))
 
-          linear_output = self.perceptron(hidden)
 
-          #print('linear_output')
-          #print(linear_output.shape)
+          linear2_output = self.linear2(linear1_output)
 
-          #hidden = torch.cat((lstm_output[:,-1, :256],lstm_output[:,0, 256:]),dim=-1)
+          return linear2_output
 
-          #if self.dropout_layer == True:
-          #  print("Performing dropout")
-          #  dropout_layer = nn.Dropout(p=0.5)
-          #  hidden = dropout_layer(hidden)
-          
-          #linear_output = self.linear(hidden.view(-1,256*2)) ### assuming that you are only using the output of the last LSTM cell to perform classification
-
-          return linear_output
 
 
 ############################################################
 
 device = "cuda:0"
+device = torch.device(device)
 
-#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
-classification_datasets = ['sciie-relation-extraction']
+#classification_datasets = ['sciie-relation-extraction']
 
-num_epochs = 20 #1000 #10
-patience_value = 10 #10 #3
+num_epochs = 15 #1000 #10
+patience_value = 5 #10 #3
 current_dropout = True
-current_relu = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate = 5e-5 #5e-6, 1e-5, 2e-5, 5e-5, 0.001 
-                            #1e-5 used for RoBERTa
+chosen_learning_rate = 5e-5 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_embeddings = False
+average_hidden_state = False
+validation_set_scoring = False
 
-
-#checkpoint_path = 'checkpoint51.pt'
+ 
+#checkpoint_path = 'checkpoint17.pt' #11, 12, 13, 15, 17, 18
 #model_choice = "t5-3b"
 #assigned_batch_size = 2
 #tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint61.pt'
+#checkpoint_path = 'checkpoint22.pt'
 #model_choice = 'bert-base-uncased'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint72.pt'
+#checkpoint_path = 'checkpoint37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-                                             #attention_probs_dropout_prob=0.5)
-                                                      #hidden_dropout_prob=0.5)
 
-
-#checkpoint_path = 'checkpoint88.pt' #'checkpoint86.pt' #'checkpoint84.pt'
-#model_choice = 'roberta-large'
-#assigned_batch_size = 1
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-
-checkpoint_path = 'checkpoint207.pt' #'checkpoint205.pt' #'checkpoint44.pt'
-model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
-assigned_batch_size = 1
+checkpoint_path = 'checkpoint46.pt' # 42, 43, 44, 45, 46, 47, 48, 49
+model_choice = 'roberta-large'
+assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+first_phase_encoder = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
 
+#checkpoint_path = 'checkpoint105.pt' #'checkpoint44.pt'
+#model_choice = 'sentence-transformers/sentence-t5-base'
+#assigned_batch_size = 32
+#tokenizer = SentenceTransformer(model_choice, device='cuda').tokenizer 
+
+#checkpoint_path = 'checkpoint207.pt' #'checkpoint205.pt' #'checkpoint44.pt'
+#model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
+#assigned_batch_size = 4
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = 'hivemind/gpt-j-6B-8bit'
 #tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
@@ -216,24 +235,43 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 def tokenize_function(examples):
 
+    #current_tokenization = tokenizer(examples["text"], padding="max_length", truncation=True, return_tensors="pt")
+    #current_embeddings = first_phase_encoder(**current_tokenization)
+
+    #return current_tokenization, current_embeddings#.input_ids
+
     return tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
+
+# def gather_embeddings(examples):
+
+#     current_tokens = tokenizer(examples["text"], padding="max_length", truncation=True, return_tensors="pt")
+#     current_embeddings = first_phase_encoder(**current_tokens)
+    
+#     #print(current_embeddings.shape)
+#     #print(current_embeddings)
+#     return current_embeddings
+
 
 ############################################################
 
 for dataset in classification_datasets:
 
+    print("GPU Memory available at the start")
+    print(get_gpu_memory())
+
     execution_start = time.time()
 
     print("Dataset: " + dataset)
     print("Model: " + model_choice)
-    print("Relu: " + str(current_relu))
     print("Dropout: " + str(current_dropout))
     print("Frozen Choice: " + str(frozen_choice))
     print("Number of Runs: " + str(number_of_runs))
     print('Learning Rate: ' + str(chosen_learning_rate))
-    print("Number of Epochs: " + str(num_epochs))
     print("Checkpoint Path: " + checkpoint_path)
+    print("Number of Frozen Layers: " + str(frozen_layers))
+    print("Frozen Embeddings: " + str(frozen_embeddings))
     print("Patience: " + str(patience_value))
+    print("Average Hidden Layers: " + str(average_hidden_state))
 
     # Chemprot train, dev, and test
     with open('text_classification/' + dataset + '/train.txt') as f:
@@ -275,33 +313,19 @@ for dataset in classification_datasets:
 
     ############################################################
 
-    training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
-    training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
-    training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
-
-    validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
-    validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
-    validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
-
-    test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
-    test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
-    test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
 
 
-    classification_dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 
-                                    'validation': validation_dataset_arrow, 
-                                    'test' : test_dataset_arrow})
-    tokenized_datasets = classification_dataset.map(tokenize_function, batched=True)
+    preloaded_training_tensors = torch.load('Experiment2_Tensors/' + dataset + '_' + model_choice + '_training.pt')
 
+    preloaded_validation_tensors = torch.load('Experiment2_Tensors/' + dataset + '_' + model_choice + '_validation.pt')
 
-    tokenized_datasets = tokenized_datasets.remove_columns(["text"])
-    tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
-    tokenized_datasets.set_format("torch")
+    preloaded_test_tensors = torch.load('Experiment2_Tensors/' + dataset + '_' + model_choice + '_testing.pt')
 
+    
 
     ############################################################
 
-    print("Loading Model")
+
 
     micro_averages = []
     macro_averages = []
@@ -309,16 +333,24 @@ for dataset in classification_datasets:
 
     for i in range(0, number_of_runs):
 
-        train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=32)
-        validation_dataloader = DataLoader(tokenized_datasets['validation'], shuffle=True, batch_size=32)
-        eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=32)
+        print("Loading Model")
+
+        train_dataloader = DataLoader(preloaded_training_tensors, batch_size=assigned_batch_size)
+        train_dataloader_labels = DataLoader(torch.LongTensor(train_set_label), batch_size=assigned_batch_size)
+
+        validation_dataloader = DataLoader(preloaded_validation_tensors, batch_size=assigned_batch_size)
+        validation_dataloader_labels = DataLoader(torch.LongTensor(dev_set_label), batch_size=assigned_batch_size)
+
+        eval_dataloader = DataLoader(preloaded_test_tensors, batch_size=assigned_batch_size)
+        eval_dataloader_labels = DataLoader(torch.LongTensor(test_set_label), batch_size=assigned_batch_size)
 
         print("Number of labels: " + str(len(set(train_set_label))))
 
+        ############################################################
 
-        model = CustomBERTModel(len(set(train_set_label)), model_choice, current_dropout, frozen_choice, current_relu)
+        model = CustomBERTModel(len(set(train_set_label)), model_choice, current_dropout, 
+                                frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings)
 
-        device = torch.device("cuda:0")
         model.to(device)
 
         ############################################################
@@ -327,12 +359,14 @@ for dataset in classification_datasets:
         #optimizer = AdamW(model.parameters(), lr=5e-5)
 
         criterion = nn.CrossEntropyLoss()
-        #optimizer = AdamW(model.parameters(), lr=5e-5)
-        optimizer = Adam(model.parameters(), lr=chosen_learning_rate) 
+        optimizer = Adam(model.parameters(), lr=chosen_learning_rate) #5e-6
+        #optimizer = Adam(model.parameters(), lr=1e-5) #5e-6
 
-        #lr_scheduler = get_scheduler(
-        #    name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
-        #)
+        num_training_steps = num_epochs * len(train_dataloader)
+
+        lr_scheduler = get_scheduler(
+            name="linear", optimizer=optimizer, num_warmup_steps=100, num_training_steps=num_training_steps
+        )
 
         ############################################################
 
@@ -354,7 +388,8 @@ for dataset in classification_datasets:
         early_stopping = EarlyStopping(patience=patience_value, verbose=True, path=checkpoint_path)
         #early_stopping = EarlyStopping(patience=10, verbose=True)
 
-        
+        print("Checkpoint Path: " + checkpoint_path)
+
 
         print("Beginning Training")
 
@@ -364,23 +399,20 @@ for dataset in classification_datasets:
 
             progress_bar = tqdm(range(len(train_dataloader)))
 
-
+            
             model.train()
-            for batch in train_dataloader:
+            for batch, labels in zip(train_dataloader, train_dataloader_labels):
 
                 #with torch.no_grad():
-                
-                    batch = {k: v.to(device) for k, v in batch.items()}
-                    labels = batch['labels']
 
-                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+                    new_batch = {'inputs_embeds': batch.to(device)}
                     outputs = model(**new_batch)
 
-                    loss = criterion(outputs, labels)
+                    loss = criterion(outputs, labels.to(device))
 
                     loss.backward()
                     optimizer.step()
-                    #lr_scheduler.step()
+                    lr_scheduler.step()
                     optimizer.zero_grad()
                     progress_bar.update(1)
 
@@ -390,17 +422,14 @@ for dataset in classification_datasets:
             progress_bar = tqdm(range(len(validation_dataloader)))
 
             model.eval()
-            for batch in validation_dataloader:
+            for batch, labels in zip(validation_dataloader, validation_dataloader_labels):
 
                 #with torch.no_grad():
                 
-                    batch = {k: v.to(device) for k, v in batch.items()}
-                    labels = batch['labels']
-
-                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+                    new_batch = {'inputs_embeds': batch.to(device)}
                     outputs = model(**new_batch)
 
-                    loss = criterion(outputs, labels)
+                    loss = criterion(outputs, labels.to(device))
                     progress_bar.update(1)
 
                     valid_losses.append(loss.item())
@@ -453,20 +482,30 @@ for dataset in classification_datasets:
         total_predictions = torch.FloatTensor([]).to(device)
         total_references = torch.FloatTensor([]).to(device)
 
-        progress_bar = tqdm(range(len(eval_dataloader)))
-
         inference_start = time.time()
 
-        for batch in eval_dataloader:
+        #progress_bar = tqdm(range(len(eval_dataloader)))
+        #for batch in eval_dataloader:
+
+        set_for_testing = eval_dataloader
+        labels_for_testing = eval_dataloader_labels
+
+        if validation_set_scoring == True:
+            print("Using validation set for scoring")
+            set_for_testing = validation_dataloader
+            labels_for_testing = validation_dataloader_labels
+
+        progress_bar = tqdm(range(len(set_for_testing)))
+        for batch, labels in zip(set_for_testing, labels_for_testing):
 
             with torch.no_grad():
 
-                batch = {k: v.to(device) for k, v in batch.items()}
-                labels = batch['labels']
+                labels = labels.to(device)
 
-                new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-
+                new_batch = {'inputs_embeds': batch.to(device)}
                 outputs = model(**new_batch)
+
+                loss = criterion(outputs, labels)
 
                 logits = outputs
                 predictions = torch.argmax(logits, dim=-1)
@@ -490,6 +529,9 @@ for dataset in classification_datasets:
         print(total_predictions.shape)
         print(total_references.shape)
 
+        results = metric.compute(references=total_predictions, predictions=total_references)
+        print("Accuracy for Test Set: " + str(results['accuracy']))
+
         f_1_metric = load_metric("f1")
         macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
         print("Macro F1 for Test Set: " + str(macro_f_1_results['f1']))
@@ -499,7 +541,6 @@ for dataset in classification_datasets:
         micro_averages.append(micro_f_1_results['f1'])
         macro_averages.append(macro_f_1_results['f1'])
 
-    
 
     print("Processing " + dataset + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
     print('micro_averages: ' + str(micro_averages))
@@ -515,6 +556,6 @@ for dataset in classification_datasets:
     print("Inference Time Average: " + str(statistics.mean(inference_times)))
     print("Dataset Execution Run Time: " + str(time.time() - execution_start))
 
+    print("GPU Memory available at the end")
+    print(get_gpu_memory())
 
-
-    
