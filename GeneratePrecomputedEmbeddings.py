@@ -1,4 +1,5 @@
 
+
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
@@ -26,6 +27,8 @@ import time
 import subprocess as sp
 import os
 
+from sklearn.model_selection import train_test_split
+
 ############################################################
 
 def get_gpu_memory():
@@ -38,19 +41,19 @@ def get_gpu_memory():
 
 class CustomBERTModel(nn.Module):
     def __init__(self, number_of_labels, model_choice, dropout_layer, frozen, 
-                 frozen_layer_count, average_hidden_state, frozen_embeddings, cutoff_layers):
+                 frozen_layer_count, average_hidden_state, frozen_embeddings):
 
           super(CustomBERTModel, self).__init__()
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
           if model_choice == "t5-3b":
 
-            model_encoding = T5EncoderModel.from_pretrained(model_choice)
+            model_encoding = T5EncoderModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
             self.encoderModel = model_encoding
 
           elif model_choice == "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune":
 
-            model_encoding = AutoModel.from_pretrained(model_choice)
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
             self.encoderModel = model_encoding
 
@@ -62,7 +65,7 @@ class CustomBERTModel(nn.Module):
 
           else:
 
-            model_encoding = AutoModel.from_pretrained(model_choice)
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 768
             self.encoderModel = model_encoding
 
@@ -98,11 +101,13 @@ class CustomBERTModel(nn.Module):
 
                 layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
 
-                print("Number of layers to freeze: " + str(len(layers_to_freeze)))
+                print("Length of Frozen Layers: " + str(len(layers_to_freeze)))
 
                 for module in layers_to_freeze:
                     for param in module.parameters():
                         param.requires_grad = False
+
+
 
           
           if frozen_embeddings == True:
@@ -111,31 +116,38 @@ class CustomBERTModel(nn.Module):
                 param.requires_grad = False
 
 
+
+
+
           ### New layers:
           self.linear1 = nn.Linear(embedding_size, 256)
           self.linear2 = nn.Linear(256, number_of_labels)
 
           self.embedding_size = embedding_size
           self.average_hidden_state = average_hidden_state
-          self.number_of_hidden_layers = frozen_layer_count
-
-          if cutoff_layers > 0:
-
-            print("Original number of layers: " + str(len(self.encoderModel.encoder.layer)))
-            self.encoderModel.encoder.layer = self.encoderModel.encoder.layer[cutoff_layers:]
 
 
           
 
-    def forward(self, inputs_embeds):
+    def forward(self, ids, mask):
           
-          total_output = self.encoderModel(inputs_embeds=inputs_embeds)
+          if model_choice == "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune":
 
+              total_output = self.encoderModel(
+                   input_ids=ids,
+                   decoder_input_ids=ids, 
+                   attention_mask=mask)
+
+          else:
+
+              total_output = self.encoderModel(
+                   ids, 
+                   attention_mask=mask)
+
+          #pooler_output = total_output['pooler_output']
           sequence_output = total_output['last_hidden_state']
 
           if self.average_hidden_state == True:
-
-            print("Averaging the hidden states")
 
             sequence_output = torch.mean(sequence_output, dim=1)
             linear1_output = self.linear1(sequence_output)
@@ -147,7 +159,7 @@ class CustomBERTModel(nn.Module):
 
           linear2_output = self.linear2(linear1_output)
 
-          return linear2_output
+          return linear2_output, total_output['hidden_states'][11]
 
 
 
@@ -167,14 +179,11 @@ patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
-
-chosen_learning_rate = 5e-5 # Already tried 0.01, 0.0001, 0.001 1e-5, 5e-5, 5e-6 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
-
-frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+chosen_learning_rate = 5e-6 #5e-7, 5e-6, 1e-5, 2e-5, 5e-5, 0.001, 0.0001
+frozen_layers = 12 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 validation_set_scoring = False
-layer_cutoff_count = 12
 
  
 #checkpoint_path = 'checkpoint17.pt' #11, 12, 13, 15, 17, 18
@@ -192,18 +201,17 @@ layer_cutoff_count = 12
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-checkpoint_path = 'checkpoint46.pt' # 42, 43, 44, 45, 46, 47, 48, 49
+checkpoint_path = 'checkpoint40.pt' # 42, 43, 44, 45, 46, 47, 48, 49
 model_choice = 'roberta-large'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-first_phase_encoder = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
 
 #checkpoint_path = 'checkpoint105.pt' #'checkpoint44.pt'
 #model_choice = 'sentence-transformers/sentence-t5-base'
 #assigned_batch_size = 32
 #tokenizer = SentenceTransformer(model_choice, device='cuda').tokenizer 
 
-#checkpoint_path = 'checkpoint207.pt' #'checkpoint205.pt' #'checkpoint44.pt'
+#checkpoint_path = 'checkpoint208.pt' #'checkpoint205.pt' #'checkpoint44.pt'
 #model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
 #assigned_batch_size = 4
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -219,22 +227,7 @@ first_phase_encoder = AutoModel.from_pretrained(model_choice, output_hidden_stat
 
 def tokenize_function(examples):
 
-    #current_tokenization = tokenizer(examples["text"], padding="max_length", truncation=True, return_tensors="pt")
-    #current_embeddings = first_phase_encoder(**current_tokenization)
-
-    #return current_tokenization, current_embeddings#.input_ids
-
     return tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
-
-# def gather_embeddings(examples):
-
-#     current_tokens = tokenizer(examples["text"], padding="max_length", truncation=True, return_tensors="pt")
-#     current_embeddings = first_phase_encoder(**current_tokens)
-    
-#     #print(current_embeddings.shape)
-#     #print(current_embeddings)
-#     return current_embeddings
-
 
 ############################################################
 
@@ -242,6 +235,15 @@ for dataset in classification_datasets:
 
     print("GPU Memory available at the start")
     print(get_gpu_memory())
+
+    #print("Actual memory usage")
+    #from pynvml import *
+    #nvmlInit()
+    #h = nvmlDeviceGetHandleByIndex(0)
+    #info = nvmlDeviceGetMemoryInfo(h)
+    #print(f'total    : {info.total}')
+    #print(f'free     : {info.free}')
+    #print(f'used     : {info.used}')
 
     execution_start = time.time()
 
@@ -256,6 +258,8 @@ for dataset in classification_datasets:
     print("Frozen Embeddings: " + str(frozen_embeddings))
     print("Patience: " + str(patience_value))
     print("Average Hidden Layers: " + str(average_hidden_state))
+    print("Validation Set Choice: " + str(validation_set_scoring))
+    print("Number of Epochs: " + str(num_epochs))
 
     # Chemprot train, dev, and test
     with open('text_classification/' + dataset + '/train.txt') as f:
@@ -297,19 +301,36 @@ for dataset in classification_datasets:
 
     ############################################################
 
+    training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
+    train, validation = train_test_split(training_df, test_size=0.15, shuffle=True)
+    train.reset_index(drop=True, inplace=True)
+    validation.reset_index(drop=True, inplace=True)
+
+    training_dataset_pandas = train#[:1000]
+    training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
+    training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+
+    validation_dataset_pandas = validation#[:1000]
+    validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
+    validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
+
+    test_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})
+    test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
+    test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
 
 
-    preloaded_training_tensors = torch.load('Experiment2_Tensors/' + dataset + '_' + model_choice + '_training.pt')
+    classification_dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 
+                                    'validation': validation_dataset_arrow, 
+                                    'test' : test_dataset_arrow})
+    tokenized_datasets = classification_dataset.map(tokenize_function, batched=True)
 
-    preloaded_validation_tensors = torch.load('Experiment2_Tensors/' + dataset + '_' + model_choice + '_validation.pt')
 
-    preloaded_test_tensors = torch.load('Experiment2_Tensors/' + dataset + '_' + model_choice + '_testing.pt')
-
+    tokenized_datasets = tokenized_datasets.remove_columns(["text"])
+    tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
+    tokenized_datasets.set_format("torch")
 
 
     ############################################################
-
-
 
     micro_averages = []
     macro_averages = []
@@ -319,21 +340,16 @@ for dataset in classification_datasets:
 
         print("Loading Model")
 
-        train_dataloader = DataLoader(preloaded_training_tensors, batch_size=assigned_batch_size)
-        train_dataloader_labels = DataLoader(torch.LongTensor(train_set_label), batch_size=assigned_batch_size)
-
-        validation_dataloader = DataLoader(preloaded_validation_tensors, batch_size=assigned_batch_size)
-        validation_dataloader_labels = DataLoader(torch.LongTensor(dev_set_label), batch_size=assigned_batch_size)
-
-        eval_dataloader = DataLoader(preloaded_test_tensors, batch_size=assigned_batch_size)
-        eval_dataloader_labels = DataLoader(torch.LongTensor(test_set_label), batch_size=assigned_batch_size)
+        train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=assigned_batch_size)
+        validation_dataloader = DataLoader(tokenized_datasets['validation'], shuffle=True, batch_size=assigned_batch_size)
+        eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
 
         print("Number of labels: " + str(len(set(train_set_label))))
 
         ############################################################
 
         model = CustomBERTModel(len(set(train_set_label)), model_choice, current_dropout, 
-                                frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings, layer_cutoff_count)
+                                frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings)
 
         model.to(device)
 
@@ -383,16 +399,19 @@ for dataset in classification_datasets:
 
             progress_bar = tqdm(range(len(train_dataloader)))
 
-            
+
             model.train()
-            for batch, labels in zip(train_dataloader, train_dataloader_labels):
+            for batch in train_dataloader:
 
                 #with torch.no_grad():
+                
+                    batch = {k: v.to(device) for k, v in batch.items()}
+                    labels = batch['labels']
 
-                    new_batch = {'inputs_embeds': batch.to(device)}
-                    outputs = model(**new_batch)
+                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+                    outputs, embeddings = model(**new_batch)
 
-                    loss = criterion(outputs, labels.to(device))
+                    loss = criterion(outputs, labels)
 
                     loss.backward()
                     optimizer.step()
@@ -406,14 +425,17 @@ for dataset in classification_datasets:
             progress_bar = tqdm(range(len(validation_dataloader)))
 
             model.eval()
-            for batch, labels in zip(validation_dataloader, validation_dataloader_labels):
+            for batch in validation_dataloader:
 
                 #with torch.no_grad():
                 
-                    new_batch = {'inputs_embeds': batch.to(device)}
-                    outputs = model(**new_batch)
+                    batch = {k: v.to(device) for k, v in batch.items()}
+                    labels = batch['labels']
 
-                    loss = criterion(outputs, labels.to(device))
+                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+                    outputs, embeddings = model(**new_batch)
+
+                    loss = criterion(outputs, labels)
                     progress_bar.update(1)
 
                     valid_losses.append(loss.item())
@@ -472,24 +494,22 @@ for dataset in classification_datasets:
         #for batch in eval_dataloader:
 
         set_for_testing = eval_dataloader
-        labels_for_testing = eval_dataloader_labels
 
         if validation_set_scoring == True:
             print("Using validation set for scoring")
             set_for_testing = validation_dataloader
-            labels_for_testing = validation_dataloader_labels
 
         progress_bar = tqdm(range(len(set_for_testing)))
-        for batch, labels in zip(set_for_testing, labels_for_testing):
+        for batch in set_for_testing:
 
             with torch.no_grad():
 
-                labels = labels.to(device)
+                batch = {k: v.to(device) for k, v in batch.items()}
+                labels = batch['labels']
 
-                new_batch = {'inputs_embeds': batch.to(device)}
-                outputs = model(**new_batch)
+                new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
 
-                loss = criterion(outputs, labels)
+                outputs, embeddings = model(**new_batch)
 
                 logits = outputs
                 predictions = torch.argmax(logits, dim=-1)
@@ -542,4 +562,126 @@ for dataset in classification_datasets:
 
     print("GPU Memory available at the end")
     print(get_gpu_memory())
+
+
+
+    ############################################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # Re-initialize datasets to their original formatting for gathering the embeddings
+
+    training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
+    training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
+    training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+
+    validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
+    validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
+    validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
+
+    test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
+    test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
+    test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
+
+
+    classification_dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 
+                                    'validation': validation_dataset_arrow, 
+                                    'test' : test_dataset_arrow})
+    tokenized_datasets = classification_dataset.map(tokenize_function, batched=True)
+
+
+    tokenized_datasets = tokenized_datasets.remove_columns(["text"])
+    tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
+    tokenized_datasets.set_format("torch")
+
+    train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
+    validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
+    eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
+
+    ############################################################
+
+    print("Beginning Gathering Embeddings")
+
+    progress_bar = tqdm(range(len(train_dataloader)))
+
+    training_embeddings = torch.FloatTensor([])
+
+    for batch in train_dataloader:
+
+        with torch.no_grad():
+        
+            batch = {k: v.to(device) for k, v in batch.items()}
+            labels = batch['labels']
+
+            new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+            outputs, embeddings = model(**new_batch)
+
+            training_embeddings = torch.cat((training_embeddings, embeddings.to('cpu')), 0)
+
+            progress_bar.update(1)
+
+    print("Training Embeddings Shape")
+    print(training_embeddings.shape)
+
+    torch.save(training_embeddings, 'Experiment2_Tensors/' + dataset + '_' + model_choice + '_training.pt')
+
+
+    #############################################################
+
+    validation_embeddings = torch.FloatTensor([])
+
+    progress_bar = tqdm(range(len(validation_dataloader)))
+
+    for batch in validation_dataloader:
+
+        with torch.no_grad():
+        
+            batch = {k: v.to(device) for k, v in batch.items()}
+            labels = batch['labels']
+
+            new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+            outputs, embeddings = model(**new_batch)
+
+            validation_embeddings = torch.cat((validation_embeddings, embeddings.to('cpu')), 0)
+
+            progress_bar.update(1)
+
+
+    torch.save(validation_embeddings, 'Experiment2_Tensors/' + dataset + '_' + model_choice + '_validation.pt')
+
+    ############################################################
+
+    testing_embeddings = torch.FloatTensor([])
+
+    progress_bar = tqdm(range(len(eval_dataloader)))
+    for batch in eval_dataloader:
+
+        with torch.no_grad():
+
+            batch = {k: v.to(device) for k, v in batch.items()}
+            labels = batch['labels']
+
+            new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+
+            outputs, embeddings = model(**new_batch)
+
+            testing_embeddings = torch.cat((testing_embeddings, embeddings.to('cpu')), 0)
+
+            progress_bar.update(1)
+
+
+    torch.save(testing_embeddings, 'Experiment2_Tensors/' + dataset + '_' + model_choice + '_testing.pt')
+
 

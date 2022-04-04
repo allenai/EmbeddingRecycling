@@ -33,3 +33,20 @@ for dataset in classification_datasets:
     print(len(train_set))
     print(len(dev_set))
     print(len(test_set))
+
+    import torch
+
+    model_choice = 'roberta-large'
+
+    preloaded_training_tensors = torch.load('Experiment2_Tensors/' + dataset + '_' + model_choice + '_training.pt')
+    preloaded_validation_tensors = torch.load('Experiment2_Tensors/' + dataset + '_' + model_choice + '_validation.pt')
+    preloaded_test_tensors = torch.load('Experiment2_Tensors/' + dataset + '_' + model_choice + '_testing.pt')
+
+    print(preloaded_training_tensors.shape)
+    print(preloaded_validation_tensors.shape)
+    print(preloaded_test_tensors.shape)
+
+
+
+
+

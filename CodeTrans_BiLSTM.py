@@ -88,6 +88,11 @@ class CustomBERTModel(nn.Module):
             for param in self.encoderModel.embeddings.parameters():
                 param.requires_grad = False
 
+          if frozen == True:
+            print("Freezing the model parameters")
+            for param in self.encoderModel.parameters():
+                param.requires_grad = False
+
 
 
 
@@ -151,12 +156,12 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
 
-num_epochs = 10 #1000 #10
+num_epochs = 20 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
-frozen_choice = False
-chosen_learning_rate = 5e-5 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
+frozen_choice = True
+chosen_learning_rate = 0.01 #Tried 0.001, 5e-6, 0.0001, 1e-5 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 195 transformer blocks for T5
 frozen_embeddings = False
 

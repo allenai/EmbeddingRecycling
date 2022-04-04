@@ -1,5 +1,3 @@
-
-
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel, RobertaForSequenceClassification
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer, AutoModelForSequenceClassification
@@ -55,12 +53,15 @@ patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate =  0.001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
+chosen_learning_rate =  0.0001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 validation_set_scoring = False
-unfrozen_components = ["deltas"] #"classifier" "encoder.layer.22", "encoder.layer.23"
+
+delta_model_choice = 'Adapter' #'BitFit'
+bottleneck_value = 24
+unfrozen_components = ["deltas", "classifier", "encoder.layer.22", "encoder.layer.23"] #"classifier" "encoder.layer.22", "encoder.layer.23"
 
  
 #checkpoint_path = 'checkpoint17.pt' #11, 12, 13, 15, 17, 18
@@ -78,7 +79,7 @@ unfrozen_components = ["deltas"] #"classifier" "encoder.layer.22", "encoder.laye
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-checkpoint_path = 'checkpoint42.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
+checkpoint_path = 'checkpoint49.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
 model_choice = 'roberta-large'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -251,9 +252,15 @@ for dataset in classification_datasets:
 
         model = AutoModelForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
         #model = RobertaForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
-        delta_model = BitFitModel(model)
-        delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
-        delta_model.log()
+
+        if delta_model_choice == 'BitFit':
+            delta_model = BitFitModel(model)
+            delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
+            delta_model.log()
+        elif delta_model_choice == 'Adapter':
+            delta_model = AdapterModel(backbone_model=model, bottleneck_dim=bottleneck_value)
+            delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
+            delta_model.log()
 
         model.to(device)
 
