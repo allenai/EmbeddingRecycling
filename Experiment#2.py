@@ -25,6 +25,7 @@ import time
 
 import subprocess as sp
 import os
+import copy
 
 ############################################################
 
@@ -33,6 +34,21 @@ def get_gpu_memory():
     memory_free_info = sp.check_output(command.split()).decode('ascii').split('\n')[:-1][1:]
     memory_free_values = [int(x.split()[0]) for i, x in enumerate(memory_free_info)]
     return memory_free_values
+
+def deleteEncodingLayers(model, num_layers_to_keep):  # must pass in the full bert model
+    oldModuleList = model.encoder.layer
+    newModuleList = nn.ModuleList()
+
+    # Now iterate over all layers, only keepign only the relevant layers.
+    for i in range(num_layers_to_keep, len(oldModuleList)):
+        print(i)
+        newModuleList.append(oldModuleList[i])
+
+    # create a copy of the model, modify it with the new list, and return
+    copyOfModel = copy.deepcopy(model)
+    copyOfModel.encoder.layer = newModuleList
+
+    return copyOfModel
 
 ############################################################
 
@@ -122,14 +138,23 @@ class CustomBERTModel(nn.Module):
           if cutoff_layers > 0:
 
             print("Original number of layers: " + str(len(self.encoderModel.encoder.layer)))
-            self.encoderModel.encoder.layer = self.encoderModel.encoder.layer[cutoff_layers:]
+            print("Cutoff layers: " + str(cutoff_layers))
+            #self.encoderModel.encoder.layer = self.encoderModel.encoder.layer[cutoff_layers:]
+
+            #self.encoderModel = deleteEncodingLayers(BertModel.from_pretrained(model_choice), cutoff_layers)
+            self.encoderModel = deleteEncodingLayers(AutoModel.from_pretrained(model_choice), cutoff_layers)
+            #self.encoderModel = self.encoderModel.encoder
 
 
           
 
     def forward(self, inputs_embeds):
           
-          total_output = self.encoderModel(inputs_embeds=inputs_embeds)
+          #total_output = self.encoderModel(inputs_embeds=inputs_embeds)
+          total_output = self.encoderModel.encoder(inputs_embeds)
+
+          #print("total_output")
+          #print(total_output)
 
           sequence_output = total_output['last_hidden_state']
 
@@ -168,7 +193,7 @@ current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
 
-chosen_learning_rate = 5e-5 # Already tried 0.01, 0.0001, 0.001 1e-5, 5e-5, 5e-6 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
+chosen_learning_rate = 0.0001 # Already tried 0.01, 0.0001, 0.001 1e-5, 5e-5, 5e-6 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
@@ -192,11 +217,11 @@ layer_cutoff_count = 12
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-checkpoint_path = 'checkpoint46.pt' # 42, 43, 44, 45, 46, 47, 48, 49
+checkpoint_path = 'checkpoint49.pt' # 42, 43, 44, 45, 46, 47, 48, 49
 model_choice = 'roberta-large'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-first_phase_encoder = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+#first_phase_encoder = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
 
 #checkpoint_path = 'checkpoint105.pt' #'checkpoint44.pt'
 #model_choice = 'sentence-transformers/sentence-t5-base'

@@ -159,6 +159,10 @@ class CustomBERTModel(nn.Module):
 
           linear2_output = self.linear2(linear1_output)
 
+          print("total_output['hidden_states'][11]")
+          print(total_output['hidden_states'][11].shape)
+          print(len(total_output['hidden_states']))
+
           return linear2_output, total_output['hidden_states'][11]
 
 
