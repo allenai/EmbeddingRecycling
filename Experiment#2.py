@@ -141,7 +141,6 @@ class CustomBERTModel(nn.Module):
             print("Cutoff layers: " + str(cutoff_layers))
             #self.encoderModel.encoder.layer = self.encoderModel.encoder.layer[cutoff_layers:]
 
-            #self.encoderModel = deleteEncodingLayers(BertModel.from_pretrained(model_choice), cutoff_layers)
             self.encoderModel = deleteEncodingLayers(AutoModel.from_pretrained(model_choice), cutoff_layers)
             #self.encoderModel = self.encoderModel.encoder
 
@@ -193,7 +192,7 @@ current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
 
-chosen_learning_rate = 0.0001 # Already tried 0.01, 0.0001, 0.001 1e-5, 5e-5, 5e-6 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
+chosen_learning_rate = 0.001 # Already tried 0.0001, 5e-6 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
