@@ -1,52 +1,55 @@
+from tqdm import tqdm
 
-import ast
+def process_NER_dataset(dataset_path):
 
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+    total_words = []
+    total_labels = []
 
-for dataset in classification_datasets:
+    current_words = []
+    current_labels = []
 
-    # Chemprot train, dev, and test
-    with open('text_classification/' + dataset + '/train.txt') as f:
+    with open(dataset_path) as f:
 
         train_set = f.readlines()
-        train_set = [ast.literal_eval(line) for line in train_set]
-        train_set_text = [line['text'] for line in train_set]
-        train_set_label = [line['label'] for line in train_set]
 
-    with open('text_classification/' + dataset + '/dev.txt') as f:
-        
-        dev_set = f.readlines()
-        dev_set = [ast.literal_eval(line) for line in dev_set]
-        dev_set_text = [line['text'] for line in dev_set]
-        dev_set_label = [line['label'] for line in dev_set]
+        for line in tqdm(train_set):
 
-    with open('text_classification/' + dataset + '/test.txt') as f:
-        
-        test_set = f.readlines()
-        test_set = [ast.literal_eval(line) for line in test_set]
-        test_set_text = [line['text'] for line in test_set]
-        test_set_label = [line['label'] for line in test_set]
+            line_split = line.split("\t")
 
+            if len(line_split) <= 2 and len(current_words) != 0:
 
+                if len(current_words) != len(current_labels):
+                    print("Error")
 
-    print(dataset)
-    print(len(train_set))
-    print(len(dev_set))
-    print(len(test_set))
+                if len(current_words) >= 512:
+                    print("Length error! Sequence truncated")
+                    current_words = current_words[:512]
+                    current_labels = current_labels[:512]
 
-    import torch
+                total_words.append(current_words)
+                total_labels.append(current_labels)
 
-    model_choice = 'roberta-large'
+                current_words = []
+                current_labels = []
 
-    preloaded_training_tensors = torch.load('Experiment2_Tensors/' + dataset + '_' + model_choice + '_training.pt')
-    preloaded_validation_tensors = torch.load('Experiment2_Tensors/' + dataset + '_' + model_choice + '_validation.pt')
-    preloaded_test_tensors = torch.load('Experiment2_Tensors/' + dataset + '_' + model_choice + '_testing.pt')
+            elif len(line_split) > 2:
 
-    print(preloaded_training_tensors.shape)
-    print(preloaded_validation_tensors.shape)
-    print(preloaded_test_tensors.shape)
+                current_words.append(line_split[0])
+                current_labels.append(line_split[3].replace("\n", ""))
 
+    return total_words, total_labels
 
+#############################################################
+
+classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
+
+print("Testing split")
+print("\n".split("\t"))
+
+testing_words, testing_labels = process_NER_dataset('ner/' + classification_datasets[2] + '/test.txt')
+
+print(testing_words[1])
+print(testing_labels[1])
 
 
 

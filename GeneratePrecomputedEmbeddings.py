@@ -131,18 +131,8 @@ class CustomBERTModel(nn.Module):
 
     def forward(self, ids, mask):
           
-          if model_choice == "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune":
-
-              total_output = self.encoderModel(
-                   input_ids=ids,
-                   decoder_input_ids=ids, 
-                   attention_mask=mask)
-
-          else:
-
-              total_output = self.encoderModel(
-                   ids, 
-                   attention_mask=mask)
+          total_output = self.encoderModel(ids, 
+                                           attention_mask=mask)
 
           #pooler_output = total_output['pooler_output']
           sequence_output = total_output['last_hidden_state']
@@ -159,9 +149,9 @@ class CustomBERTModel(nn.Module):
 
           linear2_output = self.linear2(linear1_output)
 
-          print("total_output['hidden_states'][11]")
-          print(total_output['hidden_states'][11].shape)
-          print(len(total_output['hidden_states']))
+          #print("total_output['hidden_states'][11]")
+          #print(total_output['hidden_states'][11].shape)
+          #print(len(total_output['hidden_states']))
 
           return linear2_output, total_output['hidden_states'][11]
 
@@ -172,13 +162,13 @@ class CustomBERTModel(nn.Module):
 device = "cuda:0"
 device = torch.device(device)
 
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
-#classification_datasets = ['sciie-relation-extraction']
+classification_datasets = ['sciie-relation-extraction']
 
-num_epochs = 15 #1000 #10
+num_epochs = 10 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
@@ -205,7 +195,7 @@ validation_set_scoring = False
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-checkpoint_path = 'checkpoint40.pt' # 42, 43, 44, 45, 46, 47, 48, 49
+#checkpoint_path = 'checkpoint4011_Precomputed.pt' # 42, 43, 44, 45, 46, 47, 48, 49
 model_choice = 'roberta-large'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -236,6 +226,8 @@ def tokenize_function(examples):
 ############################################################
 
 for dataset in classification_datasets:
+
+    checkpoint_path = 'checkpoint_Precomputed_' + dataset  + '_' + model_choice + '.pt'
 
     print("GPU Memory available at the start")
     print(get_gpu_memory())
@@ -639,7 +631,7 @@ for dataset in classification_datasets:
     print("Training Embeddings Shape")
     print(training_embeddings.shape)
 
-    torch.save(training_embeddings, 'Experiment2_Tensors/' + dataset + '_' + model_choice + '_training.pt')
+    torch.save(training_embeddings, 'Experiment2_Tensors_v2/' + dataset + '_' + model_choice + '_training.pt')
 
 
     #############################################################
@@ -663,7 +655,7 @@ for dataset in classification_datasets:
             progress_bar.update(1)
 
 
-    torch.save(validation_embeddings, 'Experiment2_Tensors/' + dataset + '_' + model_choice + '_validation.pt')
+    torch.save(validation_embeddings, 'Experiment2_Tensors_v2/' + dataset + '_' + model_choice + '_validation.pt')
 
     ############################################################
 
@@ -686,6 +678,6 @@ for dataset in classification_datasets:
             progress_bar.update(1)
 
 
-    torch.save(testing_embeddings, 'Experiment2_Tensors/' + dataset + '_' + model_choice + '_testing.pt')
+    torch.save(testing_embeddings, 'Experiment2_Tensors_v2/' + dataset + '_' + model_choice + '_testing.pt')
 
 

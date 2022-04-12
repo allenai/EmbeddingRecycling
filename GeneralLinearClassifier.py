@@ -27,6 +27,8 @@ import time
 import subprocess as sp
 import os
 
+from sklearn.model_selection import train_test_split
+
 ############################################################
 
 def get_gpu_memory():
@@ -164,21 +166,23 @@ device = "cuda:0"
 device = torch.device(device)
 
 #classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
-classification_datasets = ['sci-cite', 'sciie-relation-extraction']
+classification_datasets = ['chemprot', 'sci-cite']
+#classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
 
-num_epochs = 15 #1000 #10
-patience_value = 5 #10 #3
+num_epochs = 50 #1000 #10
+patience_value = 10 #10 #3
 current_dropout = True
-number_of_runs = 3 #1 #5
+number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
+chosen_learning_rate = 0.001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
-validation_set_scoring = False
+
+validation_set_scoring = True
 
  
 #checkpoint_path = 'checkpoint17.pt' #11, 12, 13, 15, 17, 18
@@ -196,10 +200,15 @@ validation_set_scoring = False
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-checkpoint_path = 'checkpoint42.pt' # 42, 43, 44, 45, 46, 47, 48, 49
+checkpoint_path = 'checkpoint46.pt' # 42, 43, 44, 45, 46, 47, 48, 49
 model_choice = 'roberta-large'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+#checkpoint_path = 'checkpoint401.pt' # 42, 43, 44, 45, 46, 47, 48, 49
+#model_choice = 'distilroberta-base'
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #checkpoint_path = 'checkpoint105.pt' #'checkpoint44.pt'
 #model_choice = 'sentence-transformers/sentence-t5-base'
@@ -227,6 +236,9 @@ def tokenize_function(examples):
 ############################################################
 
 for dataset in classification_datasets:
+
+    #checkpoint_path = "new_pretrained_" + model_choice + "_" + dataset + "_for_Scibert_mapping.pt"
+    #model_encoder_path = "pretrained_encoder_" + model_choice + "_" + dataset + "_for_Scibert_mapping.pt"
 
     print("GPU Memory available at the start")
     print(get_gpu_memory())
@@ -296,17 +308,41 @@ for dataset in classification_datasets:
 
     ############################################################
 
-    training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
-    training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
-    training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+    if validation_set_scoring == True:
 
-    validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
-    validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
-    validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
+        training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
+        train, validation = train_test_split(training_df, test_size=0.15, shuffle=True)
+        train.reset_index(drop=True, inplace=True)
+        validation.reset_index(drop=True, inplace=True)
 
-    test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
-    test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
-    test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
+        training_dataset_pandas = train#[:1000]
+        training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
+        training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+
+        validation_dataset_pandas = validation#[:1000]
+        validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
+        validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
+
+        test_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})
+        test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
+        test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
+
+    else:
+
+        training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
+        training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
+        training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+
+        validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
+        validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
+        validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
+
+        test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
+        test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
+        test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
+
+
+    ############################################################
 
 
     classification_dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 
@@ -325,6 +361,8 @@ for dataset in classification_datasets:
     micro_averages = []
     macro_averages = []
     inference_times = []
+
+    total_epochs = 0
 
     for i in range(0, number_of_runs):
 
@@ -466,6 +504,8 @@ for dataset in classification_datasets:
 
         model.load_state_dict(torch.load(checkpoint_path))
 
+        #torch.save(model.encoderModel.state_dict(), model_encoder_path)
+
 
 
         ############################################################
@@ -483,14 +523,8 @@ for dataset in classification_datasets:
         #progress_bar = tqdm(range(len(eval_dataloader)))
         #for batch in eval_dataloader:
 
-        set_for_testing = eval_dataloader
-
-        if validation_set_scoring == True:
-            print("Using validation set for scoring")
-            set_for_testing = validation_dataloader
-
-        progress_bar = tqdm(range(len(set_for_testing)))
-        for batch in set_for_testing:
+        progress_bar = tqdm(range(len(eval_dataloader)))
+        for batch in eval_dataloader:
 
             with torch.no_grad():
 
@@ -528,12 +562,12 @@ for dataset in classification_datasets:
 
         f_1_metric = load_metric("f1")
         macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
-        print("Macro F1 for Test Set: " + str(macro_f_1_results['f1']))
+        print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
         micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
-        print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']))
+        print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']  * 100))
 
-        micro_averages.append(micro_f_1_results['f1'])
-        macro_averages.append(macro_f_1_results['f1'])
+        micro_averages.append(micro_f_1_results['f1'] * 100)
+        macro_averages.append(macro_f_1_results['f1'] * 100)
 
 
     print("Processing " + dataset + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")

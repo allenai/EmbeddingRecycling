@@ -42,18 +42,18 @@ def get_gpu_memory():
 device = "cuda:0"
 device = torch.device(device)
 
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
-#classification_datasets = ['sci-cite', 'sciie-relation-extraction']
+#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
 
-num_epochs = 15 #1000 #10
+num_epochs = 10 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 3 #1 #5
+number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate =  0.001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
+chosen_learning_rate =  0.0001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
@@ -61,7 +61,16 @@ validation_set_scoring = False
 
 delta_model_choice = 'BitFit' #'Adapter' #'BitFit'
 bottleneck_value = 24
-unfrozen_components = ["deltas"] #"classifier" "encoder.layer.22", "encoder.layer.23"
+unfrozen_components = ['deltas', "classifier"]
+#unfrozen_components = ['classifier', "encoder.layer.6.attention.adapter", "encoder.layer.7.attention.adapter", 
+#                       "encoder.layer.8.attention.adapter", "encoder.layer.9.attention.adapter",
+#                       "encoder.layer.10.attention.adapter", "encoder.layer.11.attention.adapter"]
+#unfrozen_components = ['classifier', "encoder.layer.12.attention.adapter", "encoder.layer.13.attention.adapter", 
+#                       "encoder.layer.14.attention.adapter", "encoder.layer.15.attention.adapter",
+#                       "encoder.layer.16.attention.adapter", "encoder.layer.17.attention.adapter",
+#                       "encoder.layer.18.attention.adapter", "encoder.layer.19.attention.adapter",
+#                       "encoder.layer.20.attention.adapter", "encoder.layer.21.attention.adapter",
+#                       "encoder.layer.22.attention.adapter", "encoder.layer.23.attention.adapter"] #'deltas', "classifier" "encoder.layer.22", "encoder.layer.23"
 
  
 #checkpoint_path = 'checkpoint17.pt' #11, 12, 13, 15, 17, 18
@@ -74,12 +83,12 @@ unfrozen_components = ["deltas"] #"classifier" "encoder.layer.22", "encoder.laye
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+#checkpoint_path = 'checkpoint31.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-checkpoint_path = 'checkpoint401.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
+checkpoint_path = 'checkpoint411.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
 model_choice = 'roberta-large'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
