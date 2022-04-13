@@ -118,13 +118,18 @@ class CustomBERTModel(nn.Module):
 
           roberta_output = finetuned_roberta_model(roberta_ids, attention_mask=roberta_mask)
           roberta_mlp_output = self.roberta_mlp(roberta_output['last_hidden_state'])
+          roberta_mlp_output = roberta_mlp_output[:,0,:].view(-1, self.embedding_size)
           
           total_output = self.encoderModel(ids, attention_mask=mask)
           scibert_output = total_output['hidden_states'][0]
+          scibert_output = scibert_output[:,0,:].view(-1, self.embedding_size)
 
           combined_encoding = roberta_mlp_output + scibert_output
 
-          linear1_output = self.linear1(combined_encoding[:,0,:].view(-1, self.embedding_size))
+          #print("combined_encoding")
+          #print(combined_encoding.shape)
+
+          linear1_output = self.linear1(combined_encoding)
           linear2_output = self.linear2(linear1_output)
 
           return linear2_output
@@ -145,9 +150,9 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 num_epochs = 15 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 1 #1 #5
+number_of_runs = 3 #1 #5
 frozen_choice = False
-chosen_learning_rate = 5e-5 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
+chosen_learning_rate = 0.001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
@@ -157,7 +162,7 @@ validation_set_scoring = True
  
 
 
-checkpoint_path = 'checkpoint38.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+checkpoint_path = 'checkpoint32.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 model_choice = 'allenai/scibert_scivocab_uncased'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)

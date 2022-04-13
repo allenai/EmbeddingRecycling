@@ -428,10 +428,10 @@ for dataset in classification_datasets:
             train_labels = torch.FloatTensor([])
 
 
-            model.train()
+            #model.train()
             for batch in train_dataloader:
 
-                #with torch.no_grad():
+                with torch.no_grad():
                 
                     batch = {k: v.to(device) for k, v in batch.items()}
                     labels = batch['labels']
@@ -442,34 +442,34 @@ for dataset in classification_datasets:
                     train_embeddings = torch.cat((train_embeddings, embeddings.to('cpu')), 0)
                     train_labels = torch.cat((train_labels, labels.to('cpu')), 0)
 
-                    loss = criterion(outputs, labels)
+                    #loss = criterion(outputs, labels)
 
-                    loss.backward()
-                    optimizer.step()
-                    lr_scheduler.step()
-                    optimizer.zero_grad()
+                    #loss.backward()
+                    #optimizer.step()
+                    #lr_scheduler.step()
+                    #optimizer.zero_grad()
                     progress_bar.update(1)
 
-                    train_losses.append(loss.item())
+                    #train_losses.append(loss.item())
 
 
             progress_bar = tqdm(range(len(validation_dataloader)))
 
-            model.eval()
-            for batch in validation_dataloader:
+            #model.eval()
+            #for batch in validation_dataloader:
 
                 #with torch.no_grad():
                 
-                    batch = {k: v.to(device) for k, v in batch.items()}
-                    labels = batch['labels']
+                    #batch = {k: v.to(device) for k, v in batch.items()}
+                    #labels = batch['labels']
 
-                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 'inputs_embeds': torch.FloatTensor([]).to(device)}
-                    outputs, embeddings = model(**new_batch)
+                    #new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 'inputs_embeds': torch.FloatTensor([]).to(device)}
+                    #outputs, embeddings = model(**new_batch)
 
-                    loss = criterion(outputs, labels)
-                    progress_bar.update(1)
+                    #loss = criterion(outputs, labels)
+                    #progress_bar.update(1)
 
-                    valid_losses.append(loss.item())
+                    #valid_losses.append(loss.item())
 
 
             # print training/validation statistics 
@@ -507,7 +507,8 @@ for dataset in classification_datasets:
 
         model.load_state_dict(torch.load(checkpoint_path))
 
-
+        torch.save(train_embeddings, 'training_embeddings.pt')
+        torch.save(train_labels, 'training_labels.pt')
 
         ############################################################
 
@@ -627,8 +628,26 @@ for dataset in classification_datasets:
     switch_to_embeddings = True
 
 
+    ############################################################
+
+    model = CustomBERTModel(len(set(train_set_label)), model_choice, current_dropout, 
+                                frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings)
+
+    model.to(device)
+
+
     new_model = deleteEncodingLayers(model, 12)
-    print("Number of Layers: " + str(len(new_model.encoderModel.encoder.layer)))
+    print("Number of Layers of New Model: " + str(len(new_model.encoderModel.encoder.layer)))
+
+    criterion = nn.CrossEntropyLoss()
+    optimizer = Adam(model.parameters(), lr=chosen_learning_rate) #5e-6
+    #optimizer = Adam(model.parameters(), lr=1e-5) #5e-6
+
+    num_training_steps = num_epochs * len(train_dataloader)
+
+    lr_scheduler = get_scheduler(
+        name="linear", optimizer=optimizer, num_warmup_steps=100, num_training_steps=num_training_steps
+    )
 
     ############################################################
 
@@ -643,7 +662,7 @@ for dataset in classification_datasets:
 
     progress_bar = tqdm(range(len(eval_dataloader)))
 
-    model.train()
+    new_model.train()
     for batch, labels in zip(eval_dataloader, eval_dataloader_labels):
 
         #with torch.no_grad():
@@ -655,11 +674,11 @@ for dataset in classification_datasets:
                 			 'mask': torch.FloatTensor([]).to(device), 
                 			 'inputs_embeds': batch.to(device)}
 
-                outputs = model(**new_batch)
+                outputs = new_model(**new_batch)
 
                 loss = criterion(outputs, labels.long().to(device))
 
-                loss.backward(retain_graph=True)
+                loss.backward()
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
@@ -688,6 +707,6 @@ for dataset in classification_datasets:
     micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
     print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']))
 
-    print("Inference Time for Embeddings Evaluation: " + str(total_inference_time))
+    print("Training Time using Precomputed Embeddings: " + str(total_inference_time))
 
     switch_to_embeddings = False
