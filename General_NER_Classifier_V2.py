@@ -1,6 +1,5 @@
 
 
-
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel, RobertaForSequenceClassification
 from transformers import BertModel, AutoTokenizer, AutoModel
@@ -101,13 +100,78 @@ def tokenize_and_align_labels(examples):
             previous_word_idx = word_idx
         labels.append(label_ids)
 
-    if len(labels) != len(tokenized_inputs):
+    if len(labels) != len(examples["tokens"]):
         print("Labels length unequal to tokenized inputs length")
 
     tokenized_inputs["labels"] = labels
 
-    #print("Inputs")
-    #print(tokenized_inputs)
+    print("tokenized_inputs keys")
+    print(tokenized_inputs.keys())
+
+    ################################################
+
+    # Standardize lengths of tokens
+
+    # print("Original types")
+    # print(type(labels))
+    # print(type(labels[0]))
+    # print(type(labels[0][0]))
+    # print((labels[0]))
+    # print(type(tokenized_inputs["token_type_ids"]))
+    # print(type(tokenized_inputs["token_type_ids"][0]))
+    # print(type(tokenized_inputs["token_type_ids"][0][0]))
+    # print((tokenized_inputs["token_type_ids"][0]))
+    # print(type(tokenized_inputs["input_ids"]))
+    # print(type(tokenized_inputs["input_ids"][0]))
+    # print(type(tokenized_inputs["input_ids"][0][0]))
+    # print((tokenized_inputs["input_ids"][0]))
+    # print(type(tokenized_inputs["attention_mask"]))
+    # print(type(tokenized_inputs["attention_mask"][0]))
+    # print(type(tokenized_inputs["attention_mask"][0][0]))
+    # print((tokenized_inputs["attention_mask"][0]))
+
+    # new_words_lists = []
+    # new_labels_lists = []
+    # #new_tokenized_types_lists = []
+    # new_attention_masks_lists = []
+
+    # for i in range(0, len(tokenized_inputs["input_ids"])):
+
+    # 	if len(tokenized_inputs["input_ids"][i]) != len(tokenized_inputs["labels"][i]):
+    # 		print("Error in label to token matching!")
+
+    # 	new_tokens_list = tokenized_inputs["input_ids"][i]
+    # 	new_labels_list = labels[i]
+    # 	#new_types_list = tokenized_inputs["token_type_ids"][i]
+    # 	attention_mask_list = tokenized_inputs["attention_mask"][i]
+
+    # 	while len(new_tokens_list) < 32:
+    # 		new_tokens_list.append(-1)
+    # 		new_labels_list.append(-100)
+    # 		#new_types_list.append(0)
+    # 		attention_mask_list.append(0)
+
+    # 	new_words_lists.append(new_tokens_list[:32])
+    # 	new_labels_lists.append(new_labels_list[:32])
+    # 	#new_tokenized_types_lists.append(new_types_list[:512])
+    # 	new_attention_masks_lists.append(attention_mask_list[:32])
+
+
+
+    # tokenized_inputs["input_ids"] = new_words_lists
+    # tokenized_inputs["labels"] = new_labels_lists
+    # #tokenized_inputs["token_type_ids"] = new_tokenized_types_lists
+    # tokenized_inputs["attention_mask"] = new_attention_masks_lists
+
+    # ################################################
+
+    # for i in range(0, len(tokenized_inputs["input_ids"])):
+    # 	if len(tokenized_inputs["input_ids"][i]) != 32 or len(tokenized_inputs["attention_mask"][i]) != 32:
+    # 		print("Error!!!")
+    # 	if len(tokenized_inputs["input_ids"][i]) != len(tokenized_inputs["labels"][i]):
+    # 		print("Error!!!")
+
+    # ################################################
 
     return tokenized_inputs
 
@@ -125,21 +189,21 @@ patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate =  5e-5 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
+chosen_learning_rate =  2e-5 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 validation_set_scoring = False
  
-#checkpoint_path = 'checkpoint703.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
-#model_choice = 'roberta-large'
-#assigned_batch_size = 16
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
-
-checkpoint_path = 'checkpoint_scibert_ner_2102.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
-model_choice = 'allenai/scibert_scivocab_uncased'
-assigned_batch_size = 16
+checkpoint_path = 'checkpoint703.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
+model_choice = 'roberta-large'
+assigned_batch_size = 1
 tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
+
+#checkpoint_path = 'checkpoint_scibert_ner_2102.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
+#model_choice = 'allenai/scibert_scivocab_uncased'
+#assigned_batch_size = 2 #16
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True, model_max_length=512)
 
 ############################################################
 
@@ -254,9 +318,17 @@ for dataset in classification_datasets:
     tokenized_datasets = classification_dataset.map(tokenize_and_align_labels, batched=True)
 
 
-    tokenized_datasets = tokenized_datasets.remove_columns(["tokens"])
+    #tokenized_datasets = tokenized_datasets.remove_columns(["tokens"])
+    tokenized_datasets = tokenized_datasets.remove_columns(["tokens", "ner_tags"])
     #tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
     tokenized_datasets.set_format("torch")
+
+
+    print("tokenized_datasets")
+    print(tokenized_datasets['train'].features)
+    print(type(tokenized_datasets['train']['input_ids']))
+    print((tokenized_datasets['train']['input_ids'].shape))
+    print((tokenized_datasets['train']['labels'].shape))
 
 
     ############################################################
@@ -269,9 +341,9 @@ for dataset in classification_datasets:
 
         print("Loading Model")
 
-        train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=1)
-        validation_dataloader = DataLoader(tokenized_datasets['validation'], shuffle=True, batch_size=1)
-        eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=1)
+        train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=assigned_batch_size)
+        validation_dataloader = DataLoader(tokenized_datasets['validation'], shuffle=True, batch_size=assigned_batch_size)
+        eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
 
         ############################################################
 
@@ -488,5 +560,3 @@ for dataset in classification_datasets:
 
     print("GPU Memory available at the end")
     print(get_gpu_memory())
-
-

@@ -3,7 +3,7 @@
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
-import tensorflow as tf
+#import tensorflow as tf
 
 import pandas as pd
 import numpy as np
@@ -61,6 +61,24 @@ class CustomBERTModel(nn.Module):
 
             model_encoding = AutoModel.from_pretrained(model_choice)
             embedding_size = 1024
+            self.encoderModel = model_encoding
+
+          elif model_choice == "nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large":
+
+            model_encoding = AutoModel.from_pretrained(model_choice)
+            embedding_size = 384
+            self.encoderModel = model_encoding
+
+          elif model_choice == "microsoft/deberta-v3-xsmall":
+
+            model_encoding = AutoModel.from_pretrained(model_choice)
+            embedding_size = 384
+            self.encoderModel = model_encoding
+
+          elif model_choice == "t5-small":
+
+            model_encoding = AutoModel.from_pretrained(model_choice)
+            embedding_size = 512
             self.encoderModel = model_encoding
 
           else:
@@ -135,6 +153,13 @@ class CustomBERTModel(nn.Module):
                    decoder_input_ids=ids, 
                    attention_mask=mask)
 
+          elif model_choice == "t5-small":
+
+              total_output = self.encoderModel(
+                   input_ids=ids,
+                   decoder_input_ids=ids, 
+                   attention_mask=mask)
+
           else:
 
               total_output = self.encoderModel(
@@ -143,6 +168,9 @@ class CustomBERTModel(nn.Module):
 
           #pooler_output = total_output['pooler_output']
           sequence_output = total_output['last_hidden_state']
+
+          #print("sequence output")
+          #print(sequence_output.shape)
 
           if self.average_hidden_state == True:
 
@@ -165,20 +193,22 @@ class CustomBERTModel(nn.Module):
 device = "cuda:0"
 device = torch.device(device)
 
+#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
 classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot', 'sci-cite']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
+#classification_datasets = ['mag']
 
-num_epochs = 50 #1000 #10
-patience_value = 10 #10 #3
+num_epochs = 15 #1000 #10
+patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 1 #1 #5
+number_of_runs = 3 #1 #5
 frozen_choice = False
 chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_layers = 3 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 
@@ -195,15 +225,25 @@ validation_set_scoring = True
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+#checkpoint_path = 'checkpoint_scibert_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-checkpoint_path = 'checkpoint47.pt' # 42, 43, 44, 45, 46, 47, 48, 49
-model_choice = 'roberta-large'
-assigned_batch_size = 8
+#checkpoint_path = 'checkpoint48.pt' # 42, 43, 44, 45, 46, 47, 48, 49
+#model_choice = 'roberta-large'
+#assigned_batch_size = 4
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+checkpoint_path = 'checkpoint_deberta_small_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+model_choice = 'microsoft/deberta-v3-small'
+assigned_batch_size = 32
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+#checkpoint_path = 'checkpoint_deberta_xsmall_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+#model_choice = 'microsoft/deberta-v3-xsmall'
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #checkpoint_path = 'checkpoint401.pt' # 42, 43, 44, 45, 46, 47, 48, 49
 #model_choice = 'distilroberta-base'
@@ -214,6 +254,21 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 #model_choice = 'sentence-transformers/sentence-t5-base'
 #assigned_batch_size = 32
 #tokenizer = SentenceTransformer(model_choice, device='cuda').tokenizer 
+
+#checkpoint_path = 'checkpoint_minilm_101.pt'
+#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+#checkpoint_path = 'checkpoint_distilbert_101.pt'
+#model_choice = "distilbert-base-uncased"
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+#checkpoint_path = 'checkpoint_t5-small_101.pt'
+#model_choice = "t5-small"
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #checkpoint_path = 'checkpoint208.pt' #'checkpoint205.pt' #'checkpoint44.pt'
 #model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
@@ -280,8 +335,17 @@ for dataset in classification_datasets:
         
         dev_set = f.readlines()
         dev_set = [ast.literal_eval(line) for line in dev_set]
-        dev_set_text = [line['text'] for line in dev_set]
-        dev_set_label = [line['label'] for line in dev_set]
+
+        dev_set_text = []
+        dev_set_label = []
+        for line in dev_set:
+
+            # Fix bug in MAG dev where there is a single label called "category"
+            if line['label'] != 'category':
+                dev_set_text.append(line['text'])
+                dev_set_label.append(line['label'])
+            else:
+                print("Found the error with category")
 
     with open('text_classification/' + dataset + '/test.txt') as f:
         
@@ -362,9 +426,9 @@ for dataset in classification_datasets:
     macro_averages = []
     inference_times = []
 
-    total_epochs = 0
-
     for i in range(0, number_of_runs):
+
+        run_start = time.time()
 
         print("Loading Model")
 
@@ -421,7 +485,11 @@ for dataset in classification_datasets:
 
         print("Beginning Training")
 
+        total_epochs_performed = 0
+
         for epoch in range(num_epochs):
+
+            total_epochs_performed += 1
 
             print("Current Epoch: " + str(epoch))
 
@@ -583,6 +651,7 @@ for dataset in classification_datasets:
 
     print("Inference Time Average: " + str(statistics.mean(inference_times)))
     print("Dataset Execution Run Time: " + str(time.time() - execution_start))
+    print("Epoch Average Time: " + str((time.time() - run_start) / total_epochs_performed))
 
     print("GPU Memory available at the end")
     print(get_gpu_memory())

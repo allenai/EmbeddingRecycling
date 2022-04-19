@@ -141,28 +141,31 @@ class CustomBERTModel(nn.Module):
 device = "cuda:0"
 device = torch.device(device)
 
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
+classification_datasets = ['mag']
 
-num_epochs = 15 #1000 #10
-patience_value = 5 #10 #3
+num_epochs = 5 #1000 #10
+patience_value = 3 #10 #3
 current_dropout = True
-number_of_runs = 3 #1 #5
+number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate = 0.001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
+chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 
 validation_set_scoring = True
 
+load_finetuned_roberta = True
+
  
 
 
-checkpoint_path = 'checkpoint32.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+checkpoint_path = 'checkpoint_scibert_mapping_1331.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 model_choice = 'allenai/scibert_scivocab_uncased'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -208,6 +211,7 @@ for dataset in classification_datasets:
     print("Average Hidden Layers: " + str(average_hidden_state))
     print("Validation Set Choice: " + str(validation_set_scoring))
     print("Number of Epochs: " + str(num_epochs))
+    print("Loading Finetuned Embeddings: " + str(load_finetuned_roberta))
 
     # Chemprot train, dev, and test
     with open('text_classification/' + dataset + '/train.txt') as f:
@@ -221,8 +225,18 @@ for dataset in classification_datasets:
         
         dev_set = f.readlines()
         dev_set = [ast.literal_eval(line) for line in dev_set]
-        dev_set_text = [line['text'] for line in dev_set]
-        dev_set_label = [line['label'] for line in dev_set]
+
+        dev_set_text = []
+        dev_set_label = []
+        for line in dev_set:
+
+            # Fix bug in MAG dev where there is a single label called "category"
+            if line['label'] != 'category':
+                dev_set_text.append(line['text'])
+                dev_set_label.append(line['label'])
+            else:
+                print("Found the error with category")
+
 
     with open('text_classification/' + dataset + '/test.txt') as f:
         
@@ -235,6 +249,13 @@ for dataset in classification_datasets:
     ############################################################
 
     labels_list = sorted(list(set(train_set_label)))
+    dev_label_list = sorted(list(set(dev_set_label)))
+    test_label_list = sorted(list(set(test_set_label)))
+
+    print("Label Lists")
+    print(labels_list)
+    print(dev_label_list)
+    print(test_label_list)
 
     label_to_value_dict = {}
 
@@ -247,19 +268,23 @@ for dataset in classification_datasets:
     dev_set_label = [label_to_value_dict[label] for label in dev_set_label]
     test_set_label = [label_to_value_dict[label] for label in test_set_label]
 
+    print("Size of train, dev, and test sets")
+    print(len(train_set_label))
+    print(len(dev_set_label))
+    print(len(test_set_label))
+
     ############################################################
 
     # Load pretrained, finetuned RoBERTa-Large encoder
 
-    finetuned_roberta_model = CustomBERTModel(len(set(train_set_label)), 'roberta-large', current_dropout, 
-                                			  frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings)
+    finetuned_roberta_model = AutoModel.from_pretrained('roberta-large', output_hidden_states=True)
     roberta_tokenizer = AutoTokenizer.from_pretrained('roberta-large', model_max_length=512)
 
-    finetuned_roberta_path = "pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
-    finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path), strict=False)
-    #finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path))
+    if load_finetuned_roberta == True:
 
-    finetuned_roberta_model = finetuned_roberta_model.encoderModel
+        finetuned_roberta_path = "./prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
+        finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path), strict=True)
+
     finetuned_roberta_model.to(device)
 
     ############################################################

@@ -1,7 +1,7 @@
 
 
 import torch.nn as nn
-from transformers import T5Tokenizer, T5EncoderModel
+from transformers import T5Tokenizer, T5EncoderModel, AutoModelForSequenceClassification
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
 import tensorflow as tf
 
@@ -28,6 +28,8 @@ import subprocess as sp
 import os
 
 from sklearn.model_selection import train_test_split
+from opendelta import AdapterModel, BitFitModel
+import traceback
 
 ############################################################
 
@@ -41,33 +43,23 @@ def get_gpu_memory():
 
 class CustomBERTModel(nn.Module):
     def __init__(self, number_of_labels, model_choice, dropout_layer, frozen, 
-                 frozen_layer_count, average_hidden_state, frozen_embeddings):
+                 frozen_layer_count, average_hidden_state, frozen_embeddings, 
+                 chosen_delta_model, chosen_frozen_components, chosen_bottleneck):
 
           super(CustomBERTModel, self).__init__()
-          #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
-          if model_choice == "t5-3b":
 
-            model_encoding = T5EncoderModel.from_pretrained(model_choice, output_hidden_states=True)
-            embedding_size = 1024
-            self.encoderModel = model_encoding
 
-          elif model_choice == "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune":
+          #model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+          model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True, 
+                                                                              num_labels=number_of_labels)
 
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-            embedding_size = 1024
-            self.encoderModel = model_encoding
+          delta_model = AdapterModel(backbone_model=model_encoding, bottleneck_dim=chosen_bottleneck)
+          delta_model.freeze_module(exclude=chosen_frozen_components, set_state_dict=True)
+          delta_model.log()
+          self.delta_model = delta_model
 
-          elif model_choice == "roberta-large":
-
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-            embedding_size = 1024
-            self.encoderModel = model_encoding
-
-          else:
-
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-            embedding_size = 768
-            self.encoderModel = model_encoding
+          embedding_size = 768
+          self.encoderModel = model_encoding.bert.encoder
 
 
 
@@ -75,8 +67,6 @@ class CustomBERTModel(nn.Module):
             print("Freezing the model parameters")
             for param in self.encoderModel.parameters():
                 param.requires_grad = False
-
-
 
           if frozen_layer_count > 0:
 
@@ -100,14 +90,9 @@ class CustomBERTModel(nn.Module):
                 print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
 
                 layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
-
-                print("Length of Frozen Layers: " + str(len(layers_to_freeze)))
-
                 for module in layers_to_freeze:
                     for param in module.parameters():
                         param.requires_grad = False
-
-
 
           
           if frozen_embeddings == True:
@@ -117,9 +102,14 @@ class CustomBERTModel(nn.Module):
 
 
 
+          ##################################################################
 
+          self.roberta_mlp = nn.Sequential(
+                                nn.Linear(1024, 1024),
+                                nn.ReLU(),
+                                nn.Linear(1024, 768)
+                             )
 
-          ### New layers:
           self.linear1 = nn.Linear(embedding_size, 256)
           self.linear2 = nn.Linear(256, number_of_labels)
 
@@ -129,31 +119,26 @@ class CustomBERTModel(nn.Module):
 
           
 
-    def forward(self, ids, mask):
+    def forward(self, roberta_ids, roberta_mask):
+
+          roberta_output = finetuned_roberta_model(roberta_ids, attention_mask=roberta_mask)
+          roberta_output = roberta_output['last_hidden_state']
+          roberta_output_reduced = self.roberta_mlp(roberta_output)
           
-          total_output = self.encoderModel(ids, 
-                                           attention_mask=mask)
+          #total_output = self.encoderModel(input_embeds=roberta_output)
+          total_output = self.encoderModel(roberta_output_reduced)['last_hidden_state']
+          total_output = total_output[:,0,:].view(-1, self.embedding_size)
 
-          #pooler_output = total_output['pooler_output']
-          sequence_output = total_output['last_hidden_state']
+          #print("total_output")
+          #print(total_output.shape)
 
-          if self.average_hidden_state == True:
-
-            sequence_output = torch.mean(sequence_output, dim=1)
-            linear1_output = self.linear1(sequence_output)
-
-          else:
-
-            linear1_output = self.linear1(sequence_output[:,0,:].view(-1, self.embedding_size))
-
-
+          linear1_output = self.linear1(total_output)
           linear2_output = self.linear2(linear1_output)
 
-          #print("total_output['hidden_states'][11]")
-          #print(total_output['hidden_states'][11].shape)
-          #print(len(total_output['hidden_states']))
+          #print("linear2_output")
+          #print(linear2_output.shape)
 
-          return linear2_output, total_output['hidden_states'][11]
+          return linear2_output
 
 
 
@@ -163,87 +148,59 @@ device = "cuda:0"
 device = torch.device(device)
 
 #classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
-#classification_datasets = ['mag']
+classification_datasets = ['mag']
 
-num_epochs = 15 #1000 #10
-patience_value = 5 #10 #3
+num_epochs = 5 #1000 #10
+patience_value = 3 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate = 5e-6 #5e-7, 5e-6, 1e-5, 2e-5, 5e-5, 0.001, 0.0001
-frozen_layers = 12 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001, 0.0001
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
-validation_set_scoring = False
 
- 
-#checkpoint_path = 'checkpoint17.pt' #11, 12, 13, 15, 17, 18
-#model_choice = "t5-3b"
-#assigned_batch_size = 2
-#tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
+validation_set_scoring = True
 
-#checkpoint_path = 'checkpoint22.pt'
-#model_choice = 'bert-base-uncased'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+load_finetuned_roberta = False
 
-#checkpoint_path = 'checkpoint37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint4011_Precomputed.pt' # 42, 43, 44, 45, 46, 47, 48, 49
-model_choice = 'roberta-large'
-assigned_batch_size = 4
+delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
+bottleneck_value = 24
+unfrozen_components = ['deltas']
+
+checkpoint_path = 'checkpoint411.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+model_choice = 'allenai/scibert_scivocab_uncased'
+assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint105.pt' #'checkpoint44.pt'
-#model_choice = 'sentence-transformers/sentence-t5-base'
-#assigned_batch_size = 32
-#tokenizer = SentenceTransformer(model_choice, device='cuda').tokenizer 
-
-#checkpoint_path = 'checkpoint208.pt' #'checkpoint205.pt' #'checkpoint44.pt'
-#model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
-#assigned_batch_size = 4
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'hivemind/gpt-j-6B-8bit'
-#tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-#model_encoding = AutoModel.from_pretrained(model_choice)
-#embedding_size = 4096
 
 
 
 ############################################################
 
-def tokenize_function(examples):
+def roberta_tokenize_function(examples):
 
-    return tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
+    tokenized_output = roberta_tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
+    tokenized_output['roberta_input_ids'] = tokenized_output.pop('input_ids')
+    tokenized_output['roberta_attention_mask'] = tokenized_output.pop('attention_mask')
+
+    return tokenized_output
 
 ############################################################
 
 for dataset in classification_datasets:
 
-    checkpoint_path = 'checkpoint_Precomputed_' + dataset  + '_' + model_choice + '.pt'
+    ###############################################################
+
+    execution_start = time.time()
 
     print("GPU Memory available at the start")
     print(get_gpu_memory())
-
-    #print("Actual memory usage")
-    #from pynvml import *
-    #nvmlInit()
-    #h = nvmlDeviceGetHandleByIndex(0)
-    #info = nvmlDeviceGetMemoryInfo(h)
-    #print(f'total    : {info.total}')
-    #print(f'free     : {info.free}')
-    #print(f'used     : {info.used}')
-
-    execution_start = time.time()
 
     print("Dataset: " + dataset)
     print("Model: " + model_choice)
@@ -258,6 +215,7 @@ for dataset in classification_datasets:
     print("Average Hidden Layers: " + str(average_hidden_state))
     print("Validation Set Choice: " + str(validation_set_scoring))
     print("Number of Epochs: " + str(num_epochs))
+    print("Loading Finetuned Embeddings: " + str(load_finetuned_roberta))
 
     # Chemprot train, dev, and test
     with open('text_classification/' + dataset + '/train.txt') as f:
@@ -321,29 +279,64 @@ for dataset in classification_datasets:
 
     ############################################################
 
-    training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
-    train, validation = train_test_split(training_df, test_size=0.15, shuffle=True)
-    train.reset_index(drop=True, inplace=True)
-    validation.reset_index(drop=True, inplace=True)
+    # Load pretrained, finetuned RoBERTa-Large encoder
 
-    training_dataset_pandas = train#[:1000]
-    training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
-    training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+    finetuned_roberta_model = AutoModel.from_pretrained('roberta-large', output_hidden_states=True)
+    roberta_tokenizer = AutoTokenizer.from_pretrained('roberta-large', model_max_length=512)
 
-    validation_dataset_pandas = validation#[:1000]
-    validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
-    validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
+    if load_finetuned_roberta == True:
 
-    test_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})
-    test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
-    test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
+        finetuned_roberta_path = "../../../net/nfs2.s2-research/jons/prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
+        #finetuned_roberta_path = "/prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
+        finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path), strict=True)
+
+    finetuned_roberta_model.to(device)
+
+    ############################################################
+
+    if validation_set_scoring == True:
+
+        training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
+        train, validation = train_test_split(training_df, test_size=0.15, shuffle=True)
+        train.reset_index(drop=True, inplace=True)
+        validation.reset_index(drop=True, inplace=True)
+
+        training_dataset_pandas = train#[:1000]
+        training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
+        training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+
+        validation_dataset_pandas = validation#[:1000]
+        validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
+        validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
+
+        test_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})
+        test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
+        test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
+
+    else:
+
+        training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
+        training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
+        training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+
+        validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
+        validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
+        validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
+
+        test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
+        test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
+        test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
+
+
+    ############################################################
 
 
     classification_dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 
                                     'validation': validation_dataset_arrow, 
                                     'test' : test_dataset_arrow})
-    tokenized_datasets = classification_dataset.map(tokenize_function, batched=True)
-
+    
+    tokenized_datasets = classification_dataset.map(roberta_tokenize_function, batched=True)
+    #tokenized_datasets = tokenized_datasets.map(tokenize_function, batched=True)
 
     tokenized_datasets = tokenized_datasets.remove_columns(["text"])
     tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
@@ -358,6 +351,8 @@ for dataset in classification_datasets:
 
     for i in range(0, number_of_runs):
 
+        run_start = time.time()
+
         print("Loading Model")
 
         train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=assigned_batch_size)
@@ -369,7 +364,8 @@ for dataset in classification_datasets:
         ############################################################
 
         model = CustomBERTModel(len(set(train_set_label)), model_choice, current_dropout, 
-                                frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings)
+                                frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings,
+                                delta_model_choice, unfrozen_components, bottleneck_value)
 
         model.to(device)
 
@@ -413,7 +409,11 @@ for dataset in classification_datasets:
 
         print("Beginning Training")
 
+        total_epochs_performed = 0
+
         for epoch in range(num_epochs):
+
+            total_epochs_performed += 1
 
             print("Current Epoch: " + str(epoch))
 
@@ -425,11 +425,12 @@ for dataset in classification_datasets:
 
                 #with torch.no_grad():
                 
-                    batch = {k: v.to(device) for k, v in batch.items()}
-                    labels = batch['labels']
+                    #batch = {k: v.to(device) for k, v in batch.items()}
+                    labels = batch['labels'].to(device)
 
-                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-                    outputs, embeddings = model(**new_batch)
+                    new_batch = {'roberta_ids': batch['roberta_input_ids'].to(device),
+                                 'roberta_mask': batch['roberta_attention_mask'].to(device)}
+                    outputs = model(**new_batch)
 
                     loss = criterion(outputs, labels)
 
@@ -449,11 +450,12 @@ for dataset in classification_datasets:
 
                 #with torch.no_grad():
                 
-                    batch = {k: v.to(device) for k, v in batch.items()}
-                    labels = batch['labels']
+                    #batch = {k: v.to(device) for k, v in batch.items()}
+                    labels = batch['labels'].to(device)
 
-                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-                    outputs, embeddings = model(**new_batch)
+                    new_batch = {'roberta_ids': batch['roberta_input_ids'].to(device),
+                                 'roberta_mask': batch['roberta_attention_mask'].to(device)}
+                    outputs = model(**new_batch)
 
                     loss = criterion(outputs, labels)
                     progress_bar.update(1)
@@ -483,7 +485,7 @@ for dataset in classification_datasets:
             # early_stopping needs the validation loss to check if it has decresed, 
             # and if it has, it will make a checkpoint of the current model
             early_stopping(valid_loss, model)
-            
+
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
@@ -494,7 +496,20 @@ for dataset in classification_datasets:
 
         print("Loading the Best Model")
 
+        #try:
+
         model.load_state_dict(torch.load(checkpoint_path))
+        print("Correctly loaded the best model!")
+
+        #except Exception:
+
+        #    print("Error loading the best model!")
+        #    traceback.print_exc()
+        #    model.load_state_dict(torch.load(checkpoint_path), strict=False)
+            #print("Loaded encoder checkpoint")
+            #print(torch.load(encoderModel_checkpoint))
+        #    model.encoderModel.load_state_dict(torch.load(encoderModel_checkpoint))
+
 
 
 
@@ -513,23 +528,18 @@ for dataset in classification_datasets:
         #progress_bar = tqdm(range(len(eval_dataloader)))
         #for batch in eval_dataloader:
 
-        set_for_testing = eval_dataloader
-
-        if validation_set_scoring == True:
-            print("Using validation set for scoring")
-            set_for_testing = validation_dataloader
-
-        progress_bar = tqdm(range(len(set_for_testing)))
-        for batch in set_for_testing:
+        progress_bar = tqdm(range(len(eval_dataloader)))
+        for batch in eval_dataloader:
 
             with torch.no_grad():
 
-                batch = {k: v.to(device) for k, v in batch.items()}
-                labels = batch['labels']
+                #batch = {k: v.to(device) for k, v in batch.items()}
+                labels = batch['labels'].to(device)
 
-                new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+                new_batch = {'roberta_ids': batch['roberta_input_ids'].to(device),
+                             'roberta_mask': batch['roberta_attention_mask'].to(device)}
 
-                outputs, embeddings = model(**new_batch)
+                outputs = model(**new_batch)
 
                 logits = outputs
                 predictions = torch.argmax(logits, dim=-1)
@@ -558,12 +568,12 @@ for dataset in classification_datasets:
 
         f_1_metric = load_metric("f1")
         macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
-        print("Macro F1 for Test Set: " + str(macro_f_1_results['f1']))
+        print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
         micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
-        print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']))
+        print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']  * 100))
 
-        micro_averages.append(micro_f_1_results['f1'])
-        macro_averages.append(macro_f_1_results['f1'])
+        micro_averages.append(micro_f_1_results['f1'] * 100)
+        macro_averages.append(macro_f_1_results['f1'] * 100)
 
 
     print("Processing " + dataset + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
@@ -579,129 +589,8 @@ for dataset in classification_datasets:
 
     print("Inference Time Average: " + str(statistics.mean(inference_times)))
     print("Dataset Execution Run Time: " + str(time.time() - execution_start))
+    print("Epoch Average Time: " + str((time.time() - run_start) / total_epochs_performed))
 
     print("GPU Memory available at the end")
     print(get_gpu_memory())
-
-
-
-    ############################################################
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # Re-initialize datasets to their original formatting for gathering the embeddings
-
-    training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
-    training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
-    training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
-
-    validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
-    validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
-    validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
-
-    test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
-    test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
-    test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
-
-
-    classification_dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 
-                                    'validation': validation_dataset_arrow, 
-                                    'test' : test_dataset_arrow})
-    tokenized_datasets = classification_dataset.map(tokenize_function, batched=True)
-
-
-    tokenized_datasets = tokenized_datasets.remove_columns(["text"])
-    tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
-    tokenized_datasets.set_format("torch")
-
-    train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
-    validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
-    eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
-
-    ############################################################
-
-    print("Beginning Gathering Embeddings")
-
-    progress_bar = tqdm(range(len(train_dataloader)))
-
-    training_embeddings = torch.FloatTensor([])
-
-    for batch in train_dataloader:
-
-        with torch.no_grad():
-        
-            batch = {k: v.to(device) for k, v in batch.items()}
-            labels = batch['labels']
-
-            new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-            outputs, embeddings = model(**new_batch)
-
-            training_embeddings = torch.cat((training_embeddings, embeddings.to('cpu')), 0)
-
-            progress_bar.update(1)
-
-    print("Training Embeddings Shape")
-    print(training_embeddings.shape)
-
-    torch.save(training_embeddings, 'Experiment2_Tensors_v2/' + dataset + '_' + model_choice + '_training.pt')
-
-
-    #############################################################
-
-    validation_embeddings = torch.FloatTensor([])
-
-    progress_bar = tqdm(range(len(validation_dataloader)))
-
-    for batch in validation_dataloader:
-
-        with torch.no_grad():
-        
-            batch = {k: v.to(device) for k, v in batch.items()}
-            labels = batch['labels']
-
-            new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-            outputs, embeddings = model(**new_batch)
-
-            validation_embeddings = torch.cat((validation_embeddings, embeddings.to('cpu')), 0)
-
-            progress_bar.update(1)
-
-
-    torch.save(validation_embeddings, 'Experiment2_Tensors_v2/' + dataset + '_' + model_choice + '_validation.pt')
-
-    ############################################################
-
-    testing_embeddings = torch.FloatTensor([])
-
-    progress_bar = tqdm(range(len(eval_dataloader)))
-    for batch in eval_dataloader:
-
-        with torch.no_grad():
-
-            batch = {k: v.to(device) for k, v in batch.items()}
-            labels = batch['labels']
-
-            new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-
-            outputs, embeddings = model(**new_batch)
-
-            testing_embeddings = torch.cat((testing_embeddings, embeddings.to('cpu')), 0)
-
-            progress_bar.update(1)
-
-
-    torch.save(testing_embeddings, 'Experiment2_Tensors_v2/' + dataset + '_' + model_choice + '_testing.pt')
-
 

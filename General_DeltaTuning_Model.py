@@ -42,14 +42,15 @@ def get_gpu_memory():
 device = "cuda:0"
 device = torch.device(device)
 
-#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
-classification_datasets = ['sci-cite', 'sciie-relation-extraction']
+#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
+#classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
+classification_datasets = ['mag']
 
 num_epochs = 10 #1000 #10
-patience_value = 5 #10 #3
+patience_value = 3 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
@@ -57,9 +58,11 @@ chosen_learning_rate =  0.0001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
+
+
 validation_set_scoring = False
 
-delta_model_choice = 'BitFit' #'Adapter' #'BitFit'
+delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 bottleneck_value = 24
 unfrozen_components = ['deltas', "classifier"]
 #unfrozen_components = ['classifier', "encoder.layer.6.attention.adapter", "encoder.layer.7.attention.adapter", 
@@ -161,8 +164,18 @@ for dataset in classification_datasets:
         
         dev_set = f.readlines()
         dev_set = [ast.literal_eval(line) for line in dev_set]
-        dev_set_text = [line['text'] for line in dev_set]
-        dev_set_label = [line['label'] for line in dev_set]
+
+        dev_set_text = []
+        dev_set_label = []
+        for line in dev_set:
+
+            # Fix bug in MAG dev where there is a single label called "category"
+            if line['label'] != 'category':
+                dev_set_text.append(line['text'])
+                dev_set_label.append(line['label'])
+            else:
+                print("Found the error with category")
+
 
     with open('text_classification/' + dataset + '/test.txt') as f:
         
@@ -175,6 +188,13 @@ for dataset in classification_datasets:
     ############################################################
 
     labels_list = sorted(list(set(train_set_label)))
+    dev_label_list = sorted(list(set(dev_set_label)))
+    test_label_list = sorted(list(set(test_set_label)))
+
+    print("Label Lists")
+    print(labels_list)
+    print(dev_label_list)
+    print(test_label_list)
 
     label_to_value_dict = {}
 
@@ -186,6 +206,11 @@ for dataset in classification_datasets:
     train_set_label = [label_to_value_dict[label] for label in train_set_label]
     dev_set_label = [label_to_value_dict[label] for label in dev_set_label]
     test_set_label = [label_to_value_dict[label] for label in test_set_label]
+
+    print("Size of train, dev, and test sets")
+    print(len(train_set_label))
+    print(len(dev_set_label))
+    print(len(test_set_label))
 
     ############################################################
 
@@ -483,3 +508,4 @@ for dataset in classification_datasets:
 
     print("GPU Memory available at the end")
     print(get_gpu_memory())
+
