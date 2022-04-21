@@ -208,7 +208,7 @@ current_dropout = True
 number_of_runs = 3 #1 #5
 frozen_choice = False
 chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 3 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 

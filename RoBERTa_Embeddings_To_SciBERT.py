@@ -100,8 +100,8 @@ class CustomBERTModel(nn.Module):
           ##################################################################
 
           self.roberta_mlp = nn.Sequential(
-                                nn.Linear(1024, 1024),
-                                nn.ReLU(),
+                                #nn.Linear(1024, 1024),
+                                #nn.ReLU(),
                                 nn.Linear(1024, 768)
                              )
 
@@ -139,15 +139,15 @@ class CustomBERTModel(nn.Module):
 device = "cuda:0"
 device = torch.device(device)
 
-#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
+classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
-classification_datasets = ['mag']
+#classification_datasets = ['mag']
 
-num_epochs = 3 #1000 #10
-patience_value = 3 #10 #3
+num_epochs = 15 #1000 #10
+patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
@@ -158,7 +158,7 @@ average_hidden_state = False
 
 validation_set_scoring = True
 
-load_finetuned_roberta = True
+load_finetuned_roberta = False
 
 
 checkpoint_path = 'checkpoint_scibert_embeddings_1308.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'

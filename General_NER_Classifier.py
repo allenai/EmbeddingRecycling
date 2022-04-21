@@ -1,12 +1,11 @@
 
 
-
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel, RobertaForSequenceClassification
 from transformers import BertModel, AutoTokenizer, AutoModel
 from transformers import RobertaTokenizer, RobertaForTokenClassification, AutoModelForTokenClassification
 import tensorflow as tf
-from opendelta import AdapterModel, BitFitModel
+
 
 import pandas as pd
 import numpy as np
@@ -63,10 +62,10 @@ def process_NER_dataset(dataset_path):
                 if len(current_words) != len(current_labels):
                     print("Error")
 
-                if len(current_words) >= 512:
-                    print("Length error! Sequence truncated")
-                    current_words = current_words[:512]
-                    current_labels = current_labels[:512]
+                #if len(current_words) >= 512:
+                #    print("Length error! Sequence truncated")
+                #    current_words = current_words[:512]
+                #    current_labels = current_labels[:512]
 
                 total_words.append(current_words)
                 total_labels.append(current_labels)
@@ -84,7 +83,7 @@ def process_NER_dataset(dataset_path):
 ############################################################
 
 def tokenize_and_align_labels(examples):
-    tokenized_inputs = tokenizer(examples["tokens"], truncation=True, is_split_into_words=True)
+    tokenized_inputs = tokenizer(examples["tokens"], padding=True, truncation=True, is_split_into_words=True)
 
     labels = []
     for i, label in enumerate(examples[f"ner_tags"]):
@@ -101,13 +100,15 @@ def tokenize_and_align_labels(examples):
             previous_word_idx = word_idx
         labels.append(label_ids)
 
-    if len(labels) != len(tokenized_inputs):
+    if len(labels) != len(examples["tokens"]):
         print("Labels length unequal to tokenized inputs length")
 
     tokenized_inputs["labels"] = labels
 
-    #print("Inputs")
-    #print(tokenized_inputs)
+    #print("tokenized_inputs keys")
+    #print(tokenized_inputs.keys())
+
+    ################################################
 
     return tokenized_inputs
 
@@ -125,21 +126,21 @@ patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate =  5e-5 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
+chosen_learning_rate =  0.0001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
-validation_set_scoring = False
+validation_set_scoring = True
  
-#checkpoint_path = 'checkpoint703.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
-#model_choice = 'roberta-large'
-#assigned_batch_size = 16
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
-
-checkpoint_path = 'checkpoint_scibert_ner_2102.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
-model_choice = 'allenai/scibert_scivocab_uncased'
-assigned_batch_size = 16
+checkpoint_path = 'checkpoint_roberta_ner_705.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
+model_choice = 'roberta-large'
+assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
+
+#checkpoint_path = 'checkpoint_scibert_ner_2102.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
+#model_choice = 'allenai/scibert_scivocab_uncased'
+#assigned_batch_size = 8 #16
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
 ############################################################
 
@@ -177,6 +178,14 @@ for dataset in classification_datasets:
     consolidated_labels = [label for label_list in train_set_label for label in label_list]
 
     labels_list = sorted(list(set(consolidated_labels)))
+
+    print("Before reordering label list")
+    print(labels_list)
+
+    labels_list.insert(0, labels_list.pop(labels_list.index('O')))
+
+    print("After reordering label list")
+    print(labels_list)
 
     label_to_value_dict = {}
 
@@ -254,9 +263,28 @@ for dataset in classification_datasets:
     tokenized_datasets = classification_dataset.map(tokenize_and_align_labels, batched=True)
 
 
-    tokenized_datasets = tokenized_datasets.remove_columns(["tokens"])
+    #tokenized_datasets = tokenized_datasets.remove_columns(["tokens"])
+    tokenized_datasets = tokenized_datasets.remove_columns(["tokens", "ner_tags"])
     #tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
     tokenized_datasets.set_format("torch")
+
+
+    #print("tokenized_datasets")
+    #print(tokenized_datasets['train'].features)
+    #print(type(tokenized_datasets['train']['input_ids']))
+    #print(len(tokenized_datasets['train']['input_ids']))
+    #print(len(tokenized_datasets['train']['labels']))
+
+    #print("----------------------------------")
+    #for index in range(0, 3):
+        #print(tokenized_datasets['train']['tokens'][index])
+        #print(tokenized_datasets['train']['input_ids'][index])
+        #print(tokenized_datasets['train']['labels'][index])
+        #print(tokenized_datasets['train']['attention_mask'][index])
+        #print(len(tokenized_datasets['train']['input_ids'][index]))
+        #print(len(tokenized_datasets['train']['labels'][index]))
+        #print(tokenized_datasets['train']['attention_mask'][index])
+        #print("----------------------------------")
 
 
     ############################################################
@@ -267,16 +295,36 @@ for dataset in classification_datasets:
 
     for i in range(0, number_of_runs):
 
+        run_start = time.time()
+
         print("Loading Model")
 
-        train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=1)
-        validation_dataloader = DataLoader(tokenized_datasets['validation'], shuffle=True, batch_size=1)
-        eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=1)
+        train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
+        validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
+        eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
+
 
         ############################################################
 
         model = AutoModelForTokenClassification.from_pretrained(model_choice, num_labels=number_of_labels)
         #model = RobertaForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
+
+        if frozen_layers > 0:
+
+            #print(model.__dict__)
+            print("Number of Layers: " + str(len(list(model.roberta.encoder.layer))))
+            print("Number of Layers to Freeze: " + str(frozen_layers))
+
+            layers_to_freeze = model.roberta.encoder.layer[:frozen_layers]
+            for module in layers_to_freeze:
+                for param in module.parameters():
+                    param.requires_grad = False
+
+        if frozen_embeddings == True:
+            print("Frozen Embeddings Layer")
+            for param in model.roberta.embeddings.parameters():
+                param.requires_grad = False
+
 
         model.to(device)
 
@@ -320,6 +368,8 @@ for dataset in classification_datasets:
 
         print("Beginning Training")
 
+        total_epochs_performed = 0
+
         for epoch in range(num_epochs):
 
             print("Current Epoch: " + str(epoch))
@@ -330,21 +380,9 @@ for dataset in classification_datasets:
             model.train()
             for batch in train_dataloader:
 
-                    #print("Example Batch")
-                    #print(batch)
-                    #batch.pop('attention_mask', None)
-                    #batch = {k: v.to(device) for k, v in batch.items()}
-
                     new_batch = {'input_ids': batch['input_ids'].to(device),
                                  'attention_mask': batch['attention_mask'].to(device)}
                     labels = batch['labels'].to(device)
-
-                    #print("new_batch")
-                    #print(new_batch)
-                    #print(labels)
-                    #print(new_batch['input_ids'].shape)
-                    #print(new_batch['attention_mask'].shape)
-                    #print(labels.shape)
 
                     outputs = model(**new_batch, labels=labels)
 
@@ -439,10 +477,18 @@ for dataset in classification_datasets:
                 outputs = model(**new_batch, labels=labels)
 
                 logits = outputs.logits
+
                 predictions = torch.argmax(logits, dim=-1)
 
-                total_predictions = torch.cat((total_predictions, predictions), 1)
-                total_references = torch.cat((total_references, batch["labels"].to(device)), 1)
+                #print("actual labels")
+                #print(labels.shape)
+                #print(torch.flatten(labels).shape)
+                #print("logits shape")
+                #print(predictions.shape)
+                #print(torch.flatten(predictions).shape)
+
+                total_predictions = torch.cat((total_predictions, torch.flatten(predictions)), 0)
+                total_references = torch.cat((total_references, torch.flatten(labels)), 0)
 
                 progress_bar.update(1)
 
@@ -454,18 +500,45 @@ for dataset in classification_datasets:
 
         ############################################################
 
-        total_predictions = total_predictions.reshape(total_predictions.shape[1])
-        total_references = total_references.reshape(total_references.shape[1])
+        #print("--------------------------")
+        #print("Predictions Shapes")
+        #print(type(total_predictions))
+        #print(type(total_references))
+        #print(total_predictions.shape)
+        #print(total_references.shape)
+        #print(total_predictions[:30])
+        #print(total_references[:30])
 
-        print("--------------------------")
-        print("Predictions Shapes")
-        print(total_predictions.shape)
-        print(total_references.shape)
+        ############################################################
+
+        # Remove all the -100 references and predictions for calculating macro f-1 scores
+
+        new_total_predictions = []
+        new_total_references = []
+
+        for j in tqdm(range(0, len(total_predictions))):
+            if total_references[j] != -100:
+                new_total_predictions.append(total_predictions[j])
+                new_total_references.append(total_references[j])
+
+        new_total_predictions = torch.FloatTensor(new_total_predictions)
+        new_total_references = torch.FloatTensor(new_total_references)
+
+        ############################################################
+
+        #print("--------------------------")
+        #print("Predictions Shapes after filtering out -100s")
+        #print(type(new_total_predictions))
+        #print(type(new_total_references))
+        #print(new_total_predictions.shape)
+        #print(new_total_references.shape)
+        #print(new_total_predictions[:30])
+        #print(new_total_references[:30])
 
         f_1_metric = load_metric("f1")
-        macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
+        macro_f_1_results = f_1_metric.compute(average='macro', references=new_total_predictions, predictions=new_total_references)
         print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
-        micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
+        micro_f_1_results = f_1_metric.compute(average='micro', references=new_total_predictions, predictions=new_total_references)
         print("Micro F1 for Test Set: " + str(micro_f_1_results['f1'] * 100))
 
         micro_averages.append(micro_f_1_results['f1'] * 100)
@@ -485,8 +558,8 @@ for dataset in classification_datasets:
 
     print("Inference Time Average: " + str(statistics.mean(inference_times)))
     print("Dataset Execution Run Time: " + str(time.time() - execution_start))
+    print("Epoch Average Time: " + str((time.time() - run_start) / total_epochs_performed))
 
     print("GPU Memory available at the end")
     print(get_gpu_memory())
-
 
