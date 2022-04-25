@@ -282,7 +282,8 @@ for dataset in classification_datasets:
 
     if load_finetuned_roberta == True:
 
-        finetuned_roberta_path = "./prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
+    	finetuned_roberta_path = "../../../net/nfs2.s2-research/jons/prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
+        #finetuned_roberta_path = "./prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
         finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path), strict=True)
 
     finetuned_roberta_model.to(device)

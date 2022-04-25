@@ -4,6 +4,7 @@ import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel, AutoModelForSequenceClassification
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
 import tensorflow as tf
+from opendelta import AdapterModel, BitFitModel
 
 import pandas as pd
 import numpy as np
@@ -28,8 +29,6 @@ import subprocess as sp
 import os
 
 from sklearn.model_selection import train_test_split
-from opendelta import AdapterModel, BitFitModel
-import traceback
 
 ############################################################
 
@@ -48,10 +47,9 @@ class CustomBERTModel(nn.Module):
 
           super(CustomBERTModel, self).__init__()
 
+          ####################################################################
 
-          #model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-          model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True, 
-                                                                              num_labels=number_of_labels)
+          model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
 
           delta_model = AdapterModel(backbone_model=model_encoding, bottleneck_dim=chosen_bottleneck)
           delta_model.freeze_module(exclude=chosen_frozen_components, set_state_dict=True)
@@ -61,6 +59,7 @@ class CustomBERTModel(nn.Module):
           embedding_size = 768
           self.encoderModel = model_encoding.bert.encoder
 
+          ####################################################################
 
 
           if frozen == True:
@@ -107,9 +106,12 @@ class CustomBERTModel(nn.Module):
           self.roberta_mlp = nn.Sequential(
                                 nn.Linear(1024, 1024),
                                 nn.ReLU(),
+                                nn.Linear(1024, 1024),
+                                nn.ReLU(),
                                 nn.Linear(1024, 768)
                              )
 
+          ### New layers:
           self.linear1 = nn.Linear(embedding_size, 256)
           self.linear2 = nn.Linear(256, number_of_labels)
 
@@ -119,24 +121,25 @@ class CustomBERTModel(nn.Module):
 
           
 
-    def forward(self, roberta_ids, roberta_mask):
+    def forward(self, ids, mask, roberta_ids, roberta_mask):
 
-          roberta_output = finetuned_roberta_model(roberta_ids, attention_mask=roberta_mask)
-          roberta_output = roberta_output['last_hidden_state']
-          roberta_output_reduced = self.roberta_mlp(roberta_output)
+          roberta_embeddings = finetuned_roberta_model(roberta_ids, attention_mask=roberta_mask)
+          roberta_embeddings = roberta_embeddings['hidden_states'][0]
+          roberta_embeddings_transformed = self.roberta_mlp(roberta_embeddings)
+
+          scibert_embeddings = scibert_model_for_embeddings(ids, attention_mask=mask)
+          scibert_embeddings = scibert_embeddings['hidden_states'][0]
+
+          ################################################
+
+          combined_embeddings = roberta_embeddings_transformed + scibert_embeddings
           
-          #total_output = self.encoderModel(input_embeds=roberta_output)
-          total_output = self.encoderModel(roberta_output_reduced)['last_hidden_state']
-          total_output = total_output[:,0,:].view(-1, self.embedding_size)
+          total_output = self.encoderModel(combined_embeddings)
+          scibert_output = total_output['last_hidden_state']
+          scibert_output = scibert_output[:,0,:].view(-1, self.embedding_size)
 
-          #print("total_output")
-          #print(total_output.shape)
-
-          linear1_output = self.linear1(total_output)
+          linear1_output = self.linear1(scibert_output)
           linear2_output = self.linear2(linear1_output)
-
-          #print("linear2_output")
-          #print(linear2_output.shape)
 
           return linear2_output
 
@@ -147,19 +150,19 @@ class CustomBERTModel(nn.Module):
 device = "cuda:0"
 device = torch.device(device)
 
-#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
+classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
-classification_datasets = ['mag']
+#classification_datasets = ['mag']
 
-num_epochs = 5 #1000 #10
-patience_value = 3 #10 #3
+num_epochs = 15 #1000 #10
+patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001, 0.0001
+chosen_learning_rate = 1e-5 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
@@ -173,15 +176,20 @@ delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 bottleneck_value = 24
 unfrozen_components = ['deltas']
 
-checkpoint_path = 'checkpoint411.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+
+checkpoint_path = 'checkpoint_scibert_adapters_1331.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 model_choice = 'allenai/scibert_scivocab_uncased'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-
+scibert_model_for_embeddings = AutoModel.from_pretrained(model_choice, output_hidden_states=True).to(device)
 
 
 ############################################################
+
+def tokenize_function(examples):
+
+    return tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
 
 def roberta_tokenize_function(examples):
 
@@ -286,8 +294,8 @@ for dataset in classification_datasets:
 
     if load_finetuned_roberta == True:
 
-        finetuned_roberta_path = "../../../net/nfs2.s2-research/jons/prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
-        #finetuned_roberta_path = "/prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
+        #finetuned_roberta_path = "../../../net/nfs2.s2-research/jons/prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
+        finetuned_roberta_path = "prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
         finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path), strict=True)
 
     finetuned_roberta_model.to(device)
@@ -336,7 +344,7 @@ for dataset in classification_datasets:
                                     'test' : test_dataset_arrow})
     
     tokenized_datasets = classification_dataset.map(roberta_tokenize_function, batched=True)
-    #tokenized_datasets = tokenized_datasets.map(tokenize_function, batched=True)
+    tokenized_datasets = tokenized_datasets.map(tokenize_function, batched=True)
 
     tokenized_datasets = tokenized_datasets.remove_columns(["text"])
     tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
@@ -428,7 +436,8 @@ for dataset in classification_datasets:
                     #batch = {k: v.to(device) for k, v in batch.items()}
                     labels = batch['labels'].to(device)
 
-                    new_batch = {'roberta_ids': batch['roberta_input_ids'].to(device),
+                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
+                                 'roberta_ids': batch['roberta_input_ids'].to(device),
                                  'roberta_mask': batch['roberta_attention_mask'].to(device)}
                     outputs = model(**new_batch)
 
@@ -453,7 +462,8 @@ for dataset in classification_datasets:
                     #batch = {k: v.to(device) for k, v in batch.items()}
                     labels = batch['labels'].to(device)
 
-                    new_batch = {'roberta_ids': batch['roberta_input_ids'].to(device),
+                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
+                                 'roberta_ids': batch['roberta_input_ids'].to(device),
                                  'roberta_mask': batch['roberta_attention_mask'].to(device)}
                     outputs = model(**new_batch)
 
@@ -485,7 +495,7 @@ for dataset in classification_datasets:
             # early_stopping needs the validation loss to check if it has decresed, 
             # and if it has, it will make a checkpoint of the current model
             early_stopping(valid_loss, model)
-
+            
             if early_stopping.early_stop:
                 print("Early stopping")
                 break
@@ -496,20 +506,7 @@ for dataset in classification_datasets:
 
         print("Loading the Best Model")
 
-        #try:
-
         model.load_state_dict(torch.load(checkpoint_path))
-        print("Correctly loaded the best model!")
-
-        #except Exception:
-
-        #    print("Error loading the best model!")
-        #    traceback.print_exc()
-        #    model.load_state_dict(torch.load(checkpoint_path), strict=False)
-            #print("Loaded encoder checkpoint")
-            #print(torch.load(encoderModel_checkpoint))
-        #    model.encoderModel.load_state_dict(torch.load(encoderModel_checkpoint))
-
 
 
 
@@ -536,7 +533,8 @@ for dataset in classification_datasets:
                 #batch = {k: v.to(device) for k, v in batch.items()}
                 labels = batch['labels'].to(device)
 
-                new_batch = {'roberta_ids': batch['roberta_input_ids'].to(device),
+                new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
+                             'roberta_ids': batch['roberta_input_ids'].to(device),
                              'roberta_mask': batch['roberta_attention_mask'].to(device)}
 
                 outputs = model(**new_batch)

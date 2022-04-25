@@ -47,15 +47,15 @@ class CustomBERTModel(nn.Module):
 
           if model_choice == 'roberta-large':
 
-          	model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-          	embedding_size = 1024
-          	self.encoderModel = model_encoding
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+            embedding_size = 1024
+            self.encoderModel = model_encoding
 
           else:
 
-          	model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-          	embedding_size = 768
-          	self.encoderModel = model_encoding
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+            embedding_size = 768
+            self.encoderModel = model_encoding
 
 
           if frozen == True:
@@ -100,8 +100,10 @@ class CustomBERTModel(nn.Module):
           ##################################################################
 
           self.roberta_mlp = nn.Sequential(
-                                #nn.Linear(1024, 1024),
-                                #nn.ReLU(),
+                                nn.Linear(1024, 1024),
+                                nn.ReLU(),
+                                nn.Linear(1024, 1024),
+                                nn.ReLU(),
                                 nn.Linear(1024, 768)
                              )
 
@@ -115,15 +117,20 @@ class CustomBERTModel(nn.Module):
 
           
 
-    def forward(self, roberta_ids, roberta_mask):
+    def forward(self, ids, mask, roberta_ids, roberta_mask):
 
-          roberta_output = finetuned_roberta_model(roberta_ids, attention_mask=roberta_mask)
-          roberta_output = roberta_output['last_hidden_state']
-          roberta_output_reduced = self.roberta_mlp(roberta_output)
+          roberta_embeddings = finetuned_roberta_model(roberta_ids, attention_mask=roberta_mask)
+          roberta_embeddings = roberta_embeddings['hidden_states'][0]
+          roberta_embeddings_transformed = self.roberta_mlp(roberta_embeddings)
+
+          scibert_embeddings = self.encoderModel(ids, attention_mask=mask)
+          scibert_embeddings = scibert_embeddings['hidden_states'][0]
+
+          ################################################
+
+          combined_embeddings = roberta_embeddings_transformed + scibert_embeddings
           
-          #total_output = self.encoderModel(input_embeds=roberta_output)
-          total_output = self.encoderModel.encoder(roberta_output_reduced)
-
+          total_output = self.encoderModel.encoder(combined_embeddings)
           scibert_output = total_output['last_hidden_state']
           scibert_output = scibert_output[:,0,:].view(-1, self.embedding_size)
 
@@ -151,7 +158,7 @@ patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001, 0.0001
+chosen_learning_rate = 0.001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
@@ -160,8 +167,10 @@ validation_set_scoring = True
 
 load_finetuned_roberta = False
 
+ 
 
-checkpoint_path = 'checkpoint_scibert_embeddings_1308.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+
+checkpoint_path = 'checkpoint_scibert_mapping_1338.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 model_choice = 'allenai/scibert_scivocab_uncased'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -170,6 +179,10 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 
 ############################################################
+
+def tokenize_function(examples):
+
+    return tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
 
 def roberta_tokenize_function(examples):
 
@@ -274,12 +287,11 @@ for dataset in classification_datasets:
 
     if load_finetuned_roberta == True:
 
+        #finetuned_roberta_path = "../../../net/nfs2.s2-research/jons/prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
         finetuned_roberta_path = "./prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
         finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path), strict=True)
 
     finetuned_roberta_model.to(device)
-
-
 
     ############################################################
 
@@ -325,7 +337,7 @@ for dataset in classification_datasets:
                                     'test' : test_dataset_arrow})
     
     tokenized_datasets = classification_dataset.map(roberta_tokenize_function, batched=True)
-    #tokenized_datasets = tokenized_datasets.map(tokenize_function, batched=True)
+    tokenized_datasets = tokenized_datasets.map(tokenize_function, batched=True)
 
     tokenized_datasets = tokenized_datasets.remove_columns(["text"])
     tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
@@ -408,22 +420,16 @@ for dataset in classification_datasets:
             progress_bar = tqdm(range(len(train_dataloader)))
 
 
-            batch_count = epoch
-
-
             model.train()
             for batch in train_dataloader:
-
-                batch_count += 1
-
-                if batch_count % 3 == 0:
 
                 #with torch.no_grad():
                 
                     #batch = {k: v.to(device) for k, v in batch.items()}
                     labels = batch['labels'].to(device)
 
-                    new_batch = {'roberta_ids': batch['roberta_input_ids'].to(device),
+                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
+                                 'roberta_ids': batch['roberta_input_ids'].to(device),
                                  'roberta_mask': batch['roberta_attention_mask'].to(device)}
                     outputs = model(**new_batch)
 
@@ -448,7 +454,8 @@ for dataset in classification_datasets:
                     #batch = {k: v.to(device) for k, v in batch.items()}
                     labels = batch['labels'].to(device)
 
-                    new_batch = {'roberta_ids': batch['roberta_input_ids'].to(device),
+                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
+                                 'roberta_ids': batch['roberta_input_ids'].to(device),
                                  'roberta_mask': batch['roberta_attention_mask'].to(device)}
                     outputs = model(**new_batch)
 
@@ -518,7 +525,8 @@ for dataset in classification_datasets:
                 #batch = {k: v.to(device) for k, v in batch.items()}
                 labels = batch['labels'].to(device)
 
-                new_batch = {'roberta_ids': batch['roberta_input_ids'].to(device),
+                new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
+                             'roberta_ids': batch['roberta_input_ids'].to(device),
                              'roberta_mask': batch['roberta_attention_mask'].to(device)}
 
                 outputs = model(**new_batch)
@@ -575,3 +583,4 @@ for dataset in classification_datasets:
 
     print("GPU Memory available at the end")
     print(get_gpu_memory())
+

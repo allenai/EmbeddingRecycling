@@ -202,7 +202,7 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sciie-relation-extraction']
 #classification_datasets = ['mag']
 
-num_epochs = 15 #1000 #10
+num_epochs = 50 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 3 #1 #5
@@ -235,10 +235,10 @@ validation_set_scoring = True
 #assigned_batch_size = 4
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-checkpoint_path = 'checkpoint_deberta_small_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
-model_choice = 'microsoft/deberta-v3-small'
-assigned_batch_size = 32
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+#checkpoint_path = 'checkpoint_deberta_small_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+#model_choice = 'microsoft/deberta-v3-small'
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #checkpoint_path = 'checkpoint_deberta_xsmall_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 #model_choice = 'microsoft/deberta-v3-xsmall'
@@ -255,15 +255,20 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 #assigned_batch_size = 32
 #tokenizer = SentenceTransformer(model_choice, device='cuda').tokenizer 
 
-#checkpoint_path = 'checkpoint_minilm_101.pt'
+#checkpoint_path = 'checkpoint_minilm_384_101.pt'
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint_distilbert_101.pt'
-#model_choice = "distilbert-base-uncased"
+#checkpoint_path = 'checkpoint_minilm_768_101.pt'
+#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+checkpoint_path = 'checkpoint_distilbert_101.pt'
+model_choice = "distilbert-base-uncased"
+assigned_batch_size = 32
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #checkpoint_path = 'checkpoint_t5-small_101.pt'
 #model_choice = "t5-small"

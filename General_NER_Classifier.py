@@ -120,11 +120,12 @@ device = torch.device(device)
 
 classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
 #classification_datasets = ['NCBI-disease']
+#classification_datasets = ['JNLPBA', 'NCBI-disease']
 
-num_epochs = 15 #1000 #10
+num_epochs = 50 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 1 #1 #5
+number_of_runs = 3 #1 #5
 frozen_choice = False
 chosen_learning_rate =  0.0001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
@@ -132,15 +133,40 @@ frozen_embeddings = False
 average_hidden_state = False
 validation_set_scoring = True
  
-checkpoint_path = 'checkpoint_roberta_ner_705.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
-model_choice = 'roberta-large'
-assigned_batch_size = 8
-tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
+#checkpoint_path = 'checkpoint_roberta_ner_704.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
+#model_choice = 'roberta-large'
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
 #checkpoint_path = 'checkpoint_scibert_ner_2102.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
 #model_choice = 'allenai/scibert_scivocab_uncased'
-#assigned_batch_size = 8 #16
+#assigned_batch_size = 32 #16
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
+
+#checkpoint_path = 'checkpoint_minilm_768_ner_102.pt'
+#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
+
+#checkpoint_path = 'checkpoint_minilm_384_ner_102.pt'
+#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
+
+checkpoint_path = 'checkpoint_distilbert_ner_101.pt'
+model_choice = "distilbert-base-uncased"
+assigned_batch_size = 32
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+#checkpoint_path = 'checkpoint_deberta_small_ner_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+#model_choice = 'microsoft/deberta-v3-small'
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+#checkpoint_path = 'checkpoint_deberta_xsmall_ner_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+#model_choice = 'microsoft/deberta-v3-xsmall'
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 ############################################################
 
@@ -260,7 +286,7 @@ for dataset in classification_datasets:
                                     'validation': validation_dataset_arrow, 
                                     'test' : test_dataset_arrow})
 
-    tokenized_datasets = classification_dataset.map(tokenize_and_align_labels, batched=True)
+    tokenized_datasets = classification_dataset.map(tokenize_and_align_labels, batched=True, batch_size=assigned_batch_size)
 
 
     #tokenized_datasets = tokenized_datasets.remove_columns(["tokens"])
@@ -371,6 +397,8 @@ for dataset in classification_datasets:
         total_epochs_performed = 0
 
         for epoch in range(num_epochs):
+
+            total_epochs_performed += 1
 
             print("Current Epoch: " + str(epoch))
 
