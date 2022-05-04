@@ -121,67 +121,15 @@ class CustomBERTModel(nn.Module):
 
     def forward(self, ids, mask, roberta_ids, roberta_mask):
 
-          #roberta_embeddings = finetuned_roberta_model(roberta_ids, attention_mask=roberta_mask)
-          #roberta_embeddings = roberta_embeddings['hidden_states'][0]
+          compact_embeddings = self.encoderModel(ids, attention_mask=mask)
+          combined_embeddings = compact_embeddings['hidden_states'][0]
 
-          #if finetuned_model_choice == 'roberta-large':
-          #  roberta_embeddings_transformed = self.roberta_mlp(roberta_embeddings)
-          #else:
-          #  roberta_embeddings_transformed = roberta_embeddings
-
-          #roberta_embeddings_transformed = tf.divide(roberta_embeddings_transformed, [100])
-
-          ################################################
-
-          combined_embeddings = []
-
-          if include_compact_embeddings == True:
-
-            compact_embeddings = self.encoderModel(ids, attention_mask=mask)
-
-            #print('compact_embeddings')
-            #print(compact_embeddings)
-
-            compact_embeddings = compact_embeddings['hidden_states'][0]
-
-            #combined_embeddings = roberta_embeddings_transformed + compact_embeddings
-            combined_embeddings = compact_embeddings
-
-          else:
-
-            combined_embeddings = roberta_embeddings_transformed
-
-          ################################################
-
-          #print("Before normalizing")
-          #print(combined_embeddings.shape)
-          #print(combined_embeddings[0])
-
-          #if normalize_embeddings == True:
-
-          #  combined_embeddings_normalized = combined_embeddings.norm(p=2, dim=1, keepdim=True)
-          #  combined_embeddings = combined_embeddings.div(combined_embeddings_normalized.expand_as(combined_embeddings))
-
-          #print("After normalizing")
-          #print(combined_embeddings.shape)
-          #print(combined_embeddings[0])
-
-          ################################################
-
-          #combined_embeddings = roberta_embeddings_transformed + compact_embeddings
-          
           total_output = self.encoderModel.encoder(combined_embeddings)
 
-          print("total_output")
-          print(total_output.shape)
+          compact_model_output = total_output['last_hidden_state']
+          compact_model_output = compact_model_output[:,0,:].view(-1, self.embedding_size)
 
-          print("Check equality")
-          print(torch.equal(total_output['hidden_states'][0], combined_embeddings))
-
-          scibert_output = total_output['last_hidden_state']
-          scibert_output = scibert_output[:,0,:].view(-1, self.embedding_size)
-
-          linear1_output = self.linear1(scibert_output)
+          linear1_output = self.linear1(compact_model_output)
           linear2_output = self.linear2(linear1_output)
 
           return linear2_output
