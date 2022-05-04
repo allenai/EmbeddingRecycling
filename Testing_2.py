@@ -1,4 +1,5 @@
 
+
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
@@ -46,15 +47,15 @@ class CustomBERTModel(nn.Module):
 
           if model_choice == 'roberta-large':
 
-          	model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-          	embedding_size = 1024
-          	self.encoderModel = model_encoding
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+            embedding_size = 1024
+            self.encoderModel = model_encoding
 
           else:
 
-          	model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-          	embedding_size = 768
-          	self.encoderModel = model_encoding
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+            embedding_size = 768
+            self.encoderModel = model_encoding
 
 
           if frozen == True:
@@ -101,6 +102,8 @@ class CustomBERTModel(nn.Module):
           self.roberta_mlp = nn.Sequential(
                                 nn.Linear(1024, 1024),
                                 nn.ReLU(),
+                                nn.Linear(1024, 1024),
+                                nn.ReLU(),
                                 nn.Linear(1024, 768)
                              )
 
@@ -116,20 +119,22 @@ class CustomBERTModel(nn.Module):
 
     def forward(self, ids, mask, roberta_ids, roberta_mask):
 
-          roberta_output = finetuned_roberta_model(roberta_ids, attention_mask=roberta_mask)
-          roberta_mlp_output = self.roberta_mlp(roberta_output['last_hidden_state'])
-          roberta_mlp_output = roberta_mlp_output[:,0,:].view(-1, self.embedding_size)
+          roberta_embeddings = finetuned_roberta_model(roberta_ids, attention_mask=roberta_mask)
+          roberta_embeddings = roberta_embeddings['hidden_states'][0]
+          roberta_embeddings_transformed = self.roberta_mlp(roberta_embeddings)
+
+          scibert_embeddings = self.encoderModel(ids, attention_mask=mask)
+          scibert_embeddings = scibert_embeddings['hidden_states'][0]
+
+          ################################################
+
+          combined_embeddings = roberta_embeddings_transformed + scibert_embeddings
           
-          total_output = self.encoderModel(ids, attention_mask=mask)
-          scibert_output = total_output['hidden_states'][0]
+          total_output = self.encoderModel.encoder(combined_embeddings)
+          scibert_output = total_output['last_hidden_state']
           scibert_output = scibert_output[:,0,:].view(-1, self.embedding_size)
 
-          combined_encoding = roberta_mlp_output + scibert_output
-
-          #print("combined_encoding")
-          #print(combined_encoding.shape)
-
-          linear1_output = self.linear1(combined_encoding)
+          linear1_output = self.linear1(scibert_output)
           linear2_output = self.linear2(linear1_output)
 
           return linear2_output
@@ -142,18 +147,20 @@ device = "cuda:0"
 device = torch.device(device)
 
 #classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
+#classification_datasets = ['chemprot', 'sci-cite']
+classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
 #classification_datasets = ['sciie-relation-extraction']
-classification_datasets = ['mag']
+#classification_datasets = ['mag']
 
-num_epochs = 5 #1000 #10
-patience_value = 3 #10 #3
+num_epochs = 15 #1000 #10
+patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 1 #1 #5
+number_of_runs = 3 #1 #5
 frozen_choice = False
-chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
+chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
@@ -164,10 +171,8 @@ load_finetuned_roberta = True
 
 random_state = 42
 
- 
 
-
-checkpoint_path = 'checkpoint_scibert_mapping_1331.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+checkpoint_path = 'checkpoint_scibert_mapping_test_1333.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 model_choice = 'allenai/scibert_scivocab_uncased'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -284,8 +289,12 @@ for dataset in classification_datasets:
 
     if load_finetuned_roberta == True:
 
-    	finetuned_roberta_path = "../../../net/nfs2.s2-research/jons/prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
-        #finetuned_roberta_path = "./prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
+        #finetuned_roberta_path = "../../../net/nfs2.s2-research/jons/prefinetuned_RoBERTa/new_pretrained_roberta-large_sciie-relation-extraction_for_Scibert_mapping.pt"
+        #finetuned_roberta_path = "./prefinetuned_RoBERTa/new_pretrained_roberta-large_sciie-relation-extraction_for_Scibert_mapping.pt"
+        finetuned_roberta_path = "./prefinetuned_RoBERTa/new_pretrained_roberta-large_chemprot_for_Scibert_mapping.pt"
+
+        print("Loading embeddings from " + finetuned_roberta_path)
+
         finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path), strict=True)
 
     finetuned_roberta_model.to(device)

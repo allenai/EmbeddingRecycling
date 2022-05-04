@@ -218,16 +218,15 @@ current_dropout = True
 number_of_runs = 3 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 2 #12 layers for BERT total, 24 layers for T5 and RoBERTa
-frozen_embeddings = True
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_embeddings = False
 average_hidden_state = False
 
 validation_set_scoring = True
 random_state = 42
 
-#learning_rate_choices = [5e-5]
-learning_rate_choices = [0.0001, 0.00001, 5e-5, 5e-6]
-#learning_rate_choices = [0.00001, 5e-5, 1e-6, 5e-6] # For RoBERTa and T5-3b full finetuned
+
+learning_rate_choices = [5e-6]
 
  
 #checkpoint_path = 'checkpoint17.pt' #11, 12, 13, 15, 17, 18
@@ -245,10 +244,10 @@ learning_rate_choices = [0.0001, 0.00001, 5e-5, 5e-6]
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint47.pt' # 42, 43, 44, 45, 46, 47, 48, 49
-#model_choice = 'roberta-large'
-#assigned_batch_size = 16
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+checkpoint_path = 'checkpoint47.pt' # 42, 43, 44, 45, 46, 47, 48, 49
+model_choice = 'roberta-large'
+assigned_batch_size = 8
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #checkpoint_path = 'checkpoint_deberta_small_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 #model_choice = 'microsoft/deberta-v3-small'
@@ -280,10 +279,10 @@ learning_rate_choices = [0.0001, 0.00001, 5e-5, 5e-6]
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-checkpoint_path = 'checkpoints/checkpoint_distilbert_1051.pt'
-model_choice = "distilbert-base-uncased"
-assigned_batch_size = 32
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+#checkpoint_path = 'checkpoint_distilbert_102.pt'
+#model_choice = "distilbert-base-uncased"
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #checkpoint_path = 'checkpoint_t5-small_101.pt'
 #model_choice = "t5-small"
@@ -602,6 +601,9 @@ for chosen_learning_rate in learning_rate_choices:
 
             model.load_state_dict(torch.load(checkpoint_path))
 
+            save_path = "pretrained_roberta_for_experiment4/" + dataset
+            torch.save(model.encoderModel.state_dict(), save_path)
+
             #torch.save(model.encoderModel.state_dict(), model_encoder_path)
 
 
@@ -731,10 +733,6 @@ max_key = max(lr_sum_dict, key=lr_sum_dict.get)
 
 print("Max Key: " + str(max_key))
 
-with open('general_linear_classifier_results/' + model_choice + '_' + checkpoint_path + '.json', 'w') as fp:
+with open('/general_linear_classifier_results/' + model_choice + '_' + checkpoint_path + '.json', 'w') as fp:
     json.dump(learning_rate_to_results_dict, fp)
-
-
-
-
 

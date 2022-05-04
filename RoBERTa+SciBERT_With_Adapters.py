@@ -171,6 +171,8 @@ validation_set_scoring = True
 
 load_finetuned_roberta = False
 
+random_state = 42
+
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 bottleneck_value = 24
@@ -305,7 +307,7 @@ for dataset in classification_datasets:
     if validation_set_scoring == True:
 
         training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
-        train, validation = train_test_split(training_df, test_size=0.15, shuffle=True)
+        train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)
         train.reset_index(drop=True, inplace=True)
         validation.reset_index(drop=True, inplace=True)
 
@@ -363,8 +365,8 @@ for dataset in classification_datasets:
 
         print("Loading Model")
 
-        train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=assigned_batch_size)
-        validation_dataloader = DataLoader(tokenized_datasets['validation'], shuffle=True, batch_size=assigned_batch_size)
+        train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
+        validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
         eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
 
         print("Number of labels: " + str(len(set(train_set_label))))
@@ -586,7 +588,7 @@ for dataset in classification_datasets:
         print("Macro F1 Standard Variation: " + str(statistics.stdev(macro_averages)))
 
     print("Inference Time Average: " + str(statistics.mean(inference_times)))
-    print("Dataset Execution Run Time: " + str(time.time() - execution_start))
+    print("Dataset Execution Run Time: " + str((time.time() - execution_start) / number_of_runs))
     print("Epoch Average Time: " + str((time.time() - run_start) / total_epochs_performed))
 
     print("GPU Memory available at the end")

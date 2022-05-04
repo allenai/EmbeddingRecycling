@@ -59,6 +59,7 @@ frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 
+random_state = 42
 
 validation_set_scoring = False
 
@@ -224,7 +225,7 @@ for dataset in classification_datasets:
 
 
     training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
-    train, validation = train_test_split(training_df, test_size=0.15, shuffle=True)
+    train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)
     train.reset_index(drop=True, inplace=True)
     validation.reset_index(drop=True, inplace=True)
 
@@ -276,8 +277,8 @@ for dataset in classification_datasets:
 
         print("Loading Model")
 
-        train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=assigned_batch_size)
-        validation_dataloader = DataLoader(tokenized_datasets['validation'], shuffle=True, batch_size=assigned_batch_size)
+        train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
+        validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
         eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
 
         print("Number of labels: " + str(len(set(train_set_label))))
@@ -504,7 +505,7 @@ for dataset in classification_datasets:
         print("Macro F1 Standard Variation: " + str(statistics.stdev(macro_averages)))
 
     print("Inference Time Average: " + str(statistics.mean(inference_times)))
-    print("Dataset Execution Run Time: " + str(time.time() - execution_start))
+    print("Dataset Execution Run Time: " + str((time.time() - execution_start) / number_of_runs))
 
     print("GPU Memory available at the end")
     print(get_gpu_memory())

@@ -3,7 +3,7 @@
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
-#import tensorflow as tf
+import tensorflow as tf
 
 import pandas as pd
 import numpy as np
@@ -44,57 +44,24 @@ class CustomBERTModel(nn.Module):
                  frozen_layer_count, average_hidden_state, frozen_embeddings):
 
           super(CustomBERTModel, self).__init__()
-          #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
-          if model_choice == "t5-3b":
 
-            model_encoding = T5EncoderModel.from_pretrained(model_choice)
+          if model_choice == 'roberta-large':
+
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
-            self.encoderModel = model_encoding
-
-          elif model_choice == "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune":
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 1024
-            self.encoderModel = model_encoding
-
-          elif model_choice == "roberta-large":
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 1024
-            self.encoderModel = model_encoding
-
-          elif model_choice == "nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large":
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 384
-            self.encoderModel = model_encoding
-
-          elif model_choice == "microsoft/deberta-v3-xsmall":
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 384
-            self.encoderModel = model_encoding
-
-          elif model_choice == "t5-small":
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 512
             self.encoderModel = model_encoding
 
           else:
 
-            model_encoding = AutoModel.from_pretrained(model_choice)
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 768
             self.encoderModel = model_encoding
-
 
 
           if frozen == True:
             print("Freezing the model parameters")
             for param in self.encoderModel.parameters():
                 param.requires_grad = False
-
-
 
           if frozen_layer_count > 0:
 
@@ -113,16 +80,6 @@ class CustomBERTModel(nn.Module):
                         for parameter in m.parameters():
                             parameter.requires_grad = True
 
-            elif model_choice == "distilbert-base-uncased":
-
-                #print(self.encoderModel.__dict__)
-                print("Number of Layers: " + str(len(list(self.encoderModel.transformer.layer))))
-
-                layers_to_freeze = self.encoderModel.transformer.layer[:frozen_layer_count]
-                for module in layers_to_freeze:
-                    for param in module.parameters():
-                        param.requires_grad = False
-
             else:
 
                 print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
@@ -132,8 +89,6 @@ class CustomBERTModel(nn.Module):
                     for param in module.parameters():
                         param.requires_grad = False
 
-
-
           
           if frozen_embeddings == True:
             print("Frozen Embeddings Layer")
@@ -142,7 +97,15 @@ class CustomBERTModel(nn.Module):
 
 
 
+          ##################################################################
 
+          self.roberta_mlp = nn.Sequential(
+                                    nn.Linear(finetuned_embeddings_size, 1024),
+                                    nn.ReLU(),
+                                    #nn.Linear(1024, 1024),
+                                    #nn.ReLU(),
+                                    nn.Linear(1024, embedding_size)
+                             )
 
           ### New layers:
           self.linear1 = nn.Linear(embedding_size, 256)
@@ -151,47 +114,74 @@ class CustomBERTModel(nn.Module):
           self.embedding_size = embedding_size
           self.average_hidden_state = average_hidden_state
 
+          #self.encoderModel = self.encoderModel.encoder
+
 
           
 
-    def forward(self, ids, mask):
+    def forward(self, ids, mask, roberta_ids, roberta_mask):
+
+          #roberta_embeddings = finetuned_roberta_model(roberta_ids, attention_mask=roberta_mask)
+          #roberta_embeddings = roberta_embeddings['hidden_states'][0]
+
+          #if finetuned_model_choice == 'roberta-large':
+          #  roberta_embeddings_transformed = self.roberta_mlp(roberta_embeddings)
+          #else:
+          #  roberta_embeddings_transformed = roberta_embeddings
+
+          #roberta_embeddings_transformed = tf.divide(roberta_embeddings_transformed, [100])
+
+          ################################################
+
+          combined_embeddings = []
+
+          if include_compact_embeddings == True:
+
+            compact_embeddings = self.encoderModel(ids, attention_mask=mask)
+
+            #print('compact_embeddings')
+            #print(compact_embeddings)
+
+            compact_embeddings = compact_embeddings['hidden_states'][0]
+
+            #combined_embeddings = roberta_embeddings_transformed + compact_embeddings
+            combined_embeddings = compact_embeddings
+
+          else:
+
+            combined_embeddings = roberta_embeddings_transformed
+
+          ################################################
+
+          #print("Before normalizing")
+          #print(combined_embeddings.shape)
+          #print(combined_embeddings[0])
+
+          #if normalize_embeddings == True:
+
+          #  combined_embeddings_normalized = combined_embeddings.norm(p=2, dim=1, keepdim=True)
+          #  combined_embeddings = combined_embeddings.div(combined_embeddings_normalized.expand_as(combined_embeddings))
+
+          #print("After normalizing")
+          #print(combined_embeddings.shape)
+          #print(combined_embeddings[0])
+
+          ################################################
+
+          #combined_embeddings = roberta_embeddings_transformed + compact_embeddings
           
-          if model_choice == "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune":
+          total_output = self.encoderModel.encoder(combined_embeddings)
 
-              total_output = self.encoderModel(
-                   input_ids=ids,
-                   decoder_input_ids=ids, 
-                   attention_mask=mask)
+          print("total_output")
+          print(total_output.shape)
 
-          elif model_choice == "t5-small":
+          print("Check equality")
+          print(torch.equal(total_output['hidden_states'][0], combined_embeddings))
 
-              total_output = self.encoderModel(
-                   input_ids=ids,
-                   decoder_input_ids=ids, 
-                   attention_mask=mask)
+          scibert_output = total_output['last_hidden_state']
+          scibert_output = scibert_output[:,0,:].view(-1, self.embedding_size)
 
-          else:
-
-              total_output = self.encoderModel(
-                   ids, 
-                   attention_mask=mask)
-
-          #pooler_output = total_output['pooler_output']
-          sequence_output = total_output['last_hidden_state']
-
-          #print("sequence output")
-          #print(sequence_output.shape)
-
-          if self.average_hidden_state == True:
-
-            sequence_output = torch.mean(sequence_output, dim=1)
-            linear1_output = self.linear1(sequence_output)
-
-          else:
-
-            linear1_output = self.linear1(sequence_output[:,0,:].view(-1, self.embedding_size))
-
-
+          linear1_output = self.linear1(scibert_output)
           linear2_output = self.linear2(linear1_output)
 
           return linear2_output
@@ -205,7 +195,6 @@ device = torch.device(device)
 
 #classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
 classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
-#classification_datasets = ['chemprot', 'sci-cite']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
@@ -215,90 +204,60 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 num_epochs = 50 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 3 #1 #5
+number_of_runs = 1 #1 #5
 frozen_choice = False
-#chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 2 #12 layers for BERT total, 24 layers for T5 and RoBERTa
-frozen_embeddings = True
+#chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_embeddings = False
 average_hidden_state = False
 
 validation_set_scoring = True
+
 random_state = 42
 
-#learning_rate_choices = [5e-5]
-learning_rate_choices = [0.0001, 0.00001, 5e-5, 5e-6]
-#learning_rate_choices = [0.00001, 5e-5, 1e-6, 5e-6] # For RoBERTa and T5-3b full finetuned
+#learning_rate_choices = [0.0001, 0.00001, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [0.00005]
 
- 
-#checkpoint_path = 'checkpoint17.pt' #11, 12, 13, 15, 17, 18
-#model_choice = "t5-3b"
-#assigned_batch_size = 2
-#tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint22.pt'
-#model_choice = 'bert-base-uncased'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint_scibert_32.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+
+
+
+
+
+
+
+
+
+load_finetuned_roberta = False
+include_compact_embeddings = True
+normalize_embeddings = False
+
+#finetuned_model_choice = 'allenai/scibert_scivocab_uncased'
+#finetuned_embeddings_size = 768
+
+finetuned_model_choice = 'roberta-large'
+finetuned_embeddings_size = 1024
+
+
+
+
+
+
+
+
+
+
+#checkpoint_path = 'checkpoints/checkpoint_scibert_mapping_1338.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 #model_choice = 'allenai/scibert_scivocab_uncased'
-#assigned_batch_size = 32
+#assigned_batch_size = 8
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint47.pt' # 42, 43, 44, 45, 46, 47, 48, 49
-#model_choice = 'roberta-large'
-#assigned_batch_size = 16
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#checkpoint_path = 'checkpoint_deberta_small_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
-#model_choice = 'microsoft/deberta-v3-small'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#checkpoint_path = 'checkpoint_deberta_xsmall_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
-#model_choice = 'microsoft/deberta-v3-xsmall'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#checkpoint_path = 'checkpoint401.pt' # 42, 43, 44, 45, 46, 47, 48, 49
-#model_choice = 'distilroberta-base'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#checkpoint_path = 'checkpoint105.pt' #'checkpoint44.pt'
-#model_choice = 'sentence-transformers/sentence-t5-base'
-#assigned_batch_size = 32
-#tokenizer = SentenceTransformer(model_choice, device='cuda').tokenizer 
-
-#checkpoint_path = 'checkpoint_minilm_384_104.pt'
-#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#checkpoint_path = 'checkpoint_minilm_768_121.pt'
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-checkpoint_path = 'checkpoints/checkpoint_distilbert_1051.pt'
-model_choice = "distilbert-base-uncased"
-assigned_batch_size = 32
+checkpoint_path = 'checkpoints/checkpoint_minilm_768_126_mapping.pt'
+model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint_t5-small_101.pt'
-#model_choice = "t5-small"
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#checkpoint_path = 'checkpoint208.pt' #'checkpoint205.pt' #'checkpoint44.pt'
-#model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
-#assigned_batch_size = 4
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'hivemind/gpt-j-6B-8bit'
-#tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-#model_encoding = AutoModel.from_pretrained(model_choice)
-#embedding_size = 4096
 
 
 
@@ -307,6 +266,14 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 def tokenize_function(examples):
 
     return tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
+
+def roberta_tokenize_function(examples):
+
+    tokenized_output = roberta_tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
+    tokenized_output['roberta_input_ids'] = tokenized_output.pop('input_ids')
+    tokenized_output['roberta_attention_mask'] = tokenized_output.pop('attention_mask')
+
+    return tokenized_output
 
 ############################################################
 
@@ -322,22 +289,12 @@ for chosen_learning_rate in learning_rate_choices:
 
     for dataset in classification_datasets:
 
-        #checkpoint_path = "new_pretrained_" + model_choice + "_" + dataset + "_for_Scibert_mapping.pt"
-        #model_encoder_path = "pretrained_encoder_" + model_choice + "_" + dataset + "_for_Scibert_mapping.pt"
+        ###############################################################
+
+        execution_start = time.time()
 
         print("GPU Memory available at the start")
         print(get_gpu_memory())
-
-        #print("Actual memory usage")
-        #from pynvml import *
-        #nvmlInit()
-        #h = nvmlDeviceGetHandleByIndex(0)
-        #info = nvmlDeviceGetMemoryInfo(h)
-        #print(f'total    : {info.total}')
-        #print(f'free     : {info.free}')
-        #print(f'used     : {info.used}')
-
-        execution_start = time.time()
 
         print("Dataset: " + dataset)
         print("Model: " + model_choice)
@@ -352,6 +309,10 @@ for chosen_learning_rate in learning_rate_choices:
         print("Average Hidden Layers: " + str(average_hidden_state))
         print("Validation Set Choice: " + str(validation_set_scoring))
         print("Number of Epochs: " + str(num_epochs))
+        print("Loading Finetuned Embeddings: " + str(load_finetuned_roberta))
+        print("Adding compact embeddings: " + str(include_compact_embeddings))
+        print("Normalize Embeddings: " + str(normalize_embeddings))
+        print("Added Model Choice: " + str(finetuned_model_choice))
 
         # Chemprot train, dev, and test
         with open('text_classification/' + dataset + '/train.txt') as f:
@@ -377,6 +338,7 @@ for chosen_learning_rate in learning_rate_choices:
                 else:
                     print("Found the error with category")
 
+
         with open('text_classification/' + dataset + '/test.txt') as f:
             
             test_set = f.readlines()
@@ -388,6 +350,13 @@ for chosen_learning_rate in learning_rate_choices:
         ############################################################
 
         labels_list = sorted(list(set(train_set_label)))
+        dev_label_list = sorted(list(set(dev_set_label)))
+        test_label_list = sorted(list(set(test_set_label)))
+
+        print("Label Lists")
+        print(labels_list)
+        print(dev_label_list)
+        print(test_label_list)
 
         label_to_value_dict = {}
 
@@ -399,6 +368,32 @@ for chosen_learning_rate in learning_rate_choices:
         train_set_label = [label_to_value_dict[label] for label in train_set_label]
         dev_set_label = [label_to_value_dict[label] for label in dev_set_label]
         test_set_label = [label_to_value_dict[label] for label in test_set_label]
+
+        print("Size of train, dev, and test sets")
+        print(len(train_set_label))
+        print(len(dev_set_label))
+        print(len(test_set_label))
+
+        ############################################################
+
+        # Load pretrained, finetuned RoBERTa-Large encoder
+
+        finetuned_roberta_model = AutoModel.from_pretrained(finetuned_model_choice, output_hidden_states=True)
+        roberta_tokenizer = AutoTokenizer.from_pretrained(finetuned_model_choice, model_max_length=512)
+
+        if load_finetuned_roberta == True:
+
+            #finetuned_roberta_path = "../../../net/nfs2.s2-research/jons/prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
+            finetuned_roberta_path = "./prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
+            finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path), strict=True)
+
+        finetuned_roberta_model.to(device)
+
+        ############################################################
+
+        nonfinetuned_compact_model = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+
+        nonfinetuned_compact_model.to(device)
 
         ############################################################
 
@@ -442,8 +437,9 @@ for chosen_learning_rate in learning_rate_choices:
         classification_dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 
                                         'validation': validation_dataset_arrow, 
                                         'test' : test_dataset_arrow})
-        tokenized_datasets = classification_dataset.map(tokenize_function, batched=True)
-
+        
+        tokenized_datasets = classification_dataset.map(roberta_tokenize_function, batched=True)
+        tokenized_datasets = tokenized_datasets.map(tokenize_function, batched=True)
 
         tokenized_datasets = tokenized_datasets.remove_columns(["text"])
         tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
@@ -531,10 +527,12 @@ for chosen_learning_rate in learning_rate_choices:
 
                     #with torch.no_grad():
                     
-                        batch = {k: v.to(device) for k, v in batch.items()}
-                        labels = batch['labels']
+                        #batch = {k: v.to(device) for k, v in batch.items()}
+                        labels = batch['labels'].to(device)
 
-                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
+                                     'roberta_ids': batch['roberta_input_ids'].to(device),
+                                     'roberta_mask': batch['roberta_attention_mask'].to(device)}
                         outputs = model(**new_batch)
 
                         loss = criterion(outputs, labels)
@@ -555,10 +553,12 @@ for chosen_learning_rate in learning_rate_choices:
 
                     #with torch.no_grad():
                     
-                        batch = {k: v.to(device) for k, v in batch.items()}
-                        labels = batch['labels']
+                        #batch = {k: v.to(device) for k, v in batch.items()}
+                        labels = batch['labels'].to(device)
 
-                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
+                                     'roberta_ids': batch['roberta_input_ids'].to(device),
+                                     'roberta_mask': batch['roberta_attention_mask'].to(device)}
                         outputs = model(**new_batch)
 
                         loss = criterion(outputs, labels)
@@ -602,8 +602,6 @@ for chosen_learning_rate in learning_rate_choices:
 
             model.load_state_dict(torch.load(checkpoint_path))
 
-            #torch.save(model.encoderModel.state_dict(), model_encoder_path)
-
 
 
             ############################################################
@@ -626,10 +624,12 @@ for chosen_learning_rate in learning_rate_choices:
 
                 with torch.no_grad():
 
-                    batch = {k: v.to(device) for k, v in batch.items()}
-                    labels = batch['labels']
+                    #batch = {k: v.to(device) for k, v in batch.items()}
+                    labels = batch['labels'].to(device)
 
-                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
+                                 'roberta_ids': batch['roberta_input_ids'].to(device),
+                                 'roberta_mask': batch['roberta_attention_mask'].to(device)}
 
                     outputs = model(**new_batch)
 
@@ -686,12 +686,15 @@ for chosen_learning_rate in learning_rate_choices:
         print("GPU Memory available at the end")
         print(get_gpu_memory())
 
+
         ############################################################
 
         current_learning_rate_results[dataset + "_micro_f1_average"] =  statistics.mean(micro_averages)
-        current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages)
+        if len(micro_averages) > 1:
+            current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages)
         current_learning_rate_results[dataset + "_macro_f1_average"] =  statistics.mean(macro_averages)
-        current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages)
+        if len(macro_averages) > 1:
+            current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages)
 
     ############################################################
     
@@ -731,10 +734,5 @@ max_key = max(lr_sum_dict, key=lr_sum_dict.get)
 
 print("Max Key: " + str(max_key))
 
-with open('general_linear_classifier_results/' + model_choice + '_' + checkpoint_path + '.json', 'w') as fp:
+with open('compact_model_combo_results/' + model_choice + '_' + checkpoint_path + '.json', 'w') as fp:
     json.dump(learning_rate_to_results_dict, fp)
-
-
-
-
-

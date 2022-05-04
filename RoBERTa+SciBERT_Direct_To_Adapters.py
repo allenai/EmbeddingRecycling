@@ -1,9 +1,10 @@
 
 
 import torch.nn as nn
-from transformers import T5Tokenizer, T5EncoderModel
+from transformers import T5Tokenizer, T5EncoderModel, AutoModelForSequenceClassification
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
 import tensorflow as tf
+from opendelta import AdapterModel, BitFitModel
 
 import pandas as pd
 import numpy as np
@@ -41,21 +42,24 @@ def get_gpu_memory():
 
 class CustomBERTModel(nn.Module):
     def __init__(self, number_of_labels, model_choice, dropout_layer, frozen, 
-                 frozen_layer_count, average_hidden_state, frozen_embeddings):
+                 frozen_layer_count, average_hidden_state, frozen_embeddings, 
+                 chosen_delta_model, chosen_frozen_components, chosen_bottleneck):
 
           super(CustomBERTModel, self).__init__()
 
-          if model_choice == 'roberta-large':
+          ####################################################################
 
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-            embedding_size = 1024
-            self.encoderModel = model_encoding
+          model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
 
-          else:
+          delta_model = AdapterModel(backbone_model=model_encoding, bottleneck_dim=chosen_bottleneck)
+          delta_model.freeze_module(exclude=chosen_frozen_components, set_state_dict=True)
+          delta_model.log()
+          self.delta_model = delta_model
 
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-            embedding_size = 768
-            self.encoderModel = model_encoding
+          embedding_size = 768
+          self.encoderModel = model_encoding.bert.encoder
+
+          ####################################################################
 
 
           if frozen == True:
@@ -123,14 +127,14 @@ class CustomBERTModel(nn.Module):
           roberta_embeddings = roberta_embeddings['hidden_states'][0]
           roberta_embeddings_transformed = self.roberta_mlp(roberta_embeddings)
 
-          scibert_embeddings = self.encoderModel(ids, attention_mask=mask)
+          scibert_embeddings = scibert_model_for_embeddings(ids, attention_mask=mask)
           scibert_embeddings = scibert_embeddings['hidden_states'][0]
 
           ################################################
 
           combined_embeddings = roberta_embeddings_transformed + scibert_embeddings
           
-          total_output = self.encoderModel.encoder(combined_embeddings)
+          total_output = self.encoderModel(combined_embeddings)
           scibert_output = total_output['last_hidden_state']
           scibert_output = scibert_output[:,0,:].view(-1, self.embedding_size)
 
@@ -158,7 +162,7 @@ patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
-chosen_learning_rate = 0.001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
+chosen_learning_rate = 1e-5 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
@@ -167,15 +171,20 @@ validation_set_scoring = True
 
 load_finetuned_roberta = False
 
- 
+random_state = 42
 
 
-checkpoint_path = 'checkpoint_scibert_mapping_1338.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
+bottleneck_value = 24
+unfrozen_components = ['deltas']
+
+
+checkpoint_path = 'checkpoint_scibert_adapters_1331.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 model_choice = 'allenai/scibert_scivocab_uncased'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-
+scibert_model_for_embeddings = AutoModel.from_pretrained(model_choice, output_hidden_states=True).to(device)
 
 
 ############################################################
@@ -288,7 +297,7 @@ for dataset in classification_datasets:
     if load_finetuned_roberta == True:
 
         #finetuned_roberta_path = "../../../net/nfs2.s2-research/jons/prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
-        finetuned_roberta_path = "./prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
+        finetuned_roberta_path = "prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
         finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path), strict=True)
 
     finetuned_roberta_model.to(device)
@@ -298,7 +307,7 @@ for dataset in classification_datasets:
     if validation_set_scoring == True:
 
         training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
-        train, validation = train_test_split(training_df, test_size=0.15, shuffle=True)
+        train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)
         train.reset_index(drop=True, inplace=True)
         validation.reset_index(drop=True, inplace=True)
 
@@ -356,8 +365,8 @@ for dataset in classification_datasets:
 
         print("Loading Model")
 
-        train_dataloader = DataLoader(tokenized_datasets['train'], shuffle=True, batch_size=assigned_batch_size)
-        validation_dataloader = DataLoader(tokenized_datasets['validation'], shuffle=True, batch_size=assigned_batch_size)
+        train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
+        validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
         eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
 
         print("Number of labels: " + str(len(set(train_set_label))))
@@ -365,7 +374,8 @@ for dataset in classification_datasets:
         ############################################################
 
         model = CustomBERTModel(len(set(train_set_label)), model_choice, current_dropout, 
-                                frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings)
+                                frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings,
+                                delta_model_choice, unfrozen_components, bottleneck_value)
 
         model.to(device)
 
@@ -578,7 +588,7 @@ for dataset in classification_datasets:
         print("Macro F1 Standard Variation: " + str(statistics.stdev(macro_averages)))
 
     print("Inference Time Average: " + str(statistics.mean(inference_times)))
-    print("Dataset Execution Run Time: " + str(time.time() - execution_start))
+    print("Dataset Execution Run Time: " + str((time.time() - execution_start) / number_of_runs))
     print("Epoch Average Time: " + str((time.time() - run_start) / total_epochs_performed))
 
     print("GPU Memory available at the end")
