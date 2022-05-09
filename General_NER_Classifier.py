@@ -135,17 +135,17 @@ validation_set_scoring = True
 
 random_state = 42
 
-learning_rate_choices = [0.0001, 0.00001, 5e-5, 5e-6]
+learning_rate_choices = [0.0001, 0.00001, 2e-5, 5e-5, 5e-6]
  
 #checkpoint_path = 'checkpoint_roberta_ner_704.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
 #model_choice = 'roberta-large'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
-checkpoint_path = 'checkpoint_scibert_ner_2111.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
-model_choice = 'allenai/scibert_scivocab_uncased'
-assigned_batch_size = 32 #16
-tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True, model_max_length=512)
+#checkpoint_path = 'checkpoint_scibert_ner_2111.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
+#model_choice = 'allenai/scibert_scivocab_uncased'
+#assigned_batch_size = 32 #16
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True, model_max_length=512)
 
 #checkpoint_path = 'checkpoint_minilm_768_ner_115.pt'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
@@ -185,6 +185,25 @@ for chosen_learning_rate in learning_rate_choices:
     current_learning_rate_results = {}
 
     for dataset in classification_datasets:
+
+        if not os.path.isdir('checkpoints/ner'):
+            os.mkdir('checkpoints/ner')
+
+        dataset_folder_path = "checkpoints/ner/" + model_choice.replace("/", "-")
+
+        if not os.path.isdir(dataset_folder_path):
+
+            print("Creating folder: " + dataset_folder_path)
+            os.mkdir(dataset_folder_path)
+
+            for dataset in classification_datasets:
+                os.mkdir(dataset_folder_path + "/" + dataset)
+
+        checkpoint_path = "checkpoints/ner/" + model_choice.replace("/", "-") + "/" + dataset + "/" + str(chosen_learning_rate) + "_"
+        checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
+        checkpoint_path += str(validation_set_scoring) + ".pt"
+
+        ##################################################
 
         print("GPU Memory available at the start")
         print(get_gpu_memory())
@@ -652,7 +671,7 @@ for chosen_learning_rate in learning_rate_choices:
 ############################################################
 
 print("-----------------------------------------------------------------")
-print("Final Results for Learning Rate Tuning")
+print("Results for Learning Rate Tuning")
 print("-----------------------------------------------------------------")
 
 lr_sum_dict = {}
@@ -675,20 +694,46 @@ for chosen_learning_rate in learning_rate_choices:
 
     lr_sum_dict[str(chosen_learning_rate)] = current_lr_sum
 
-    ("--------------------------------------------")
-    ("--------------------------------------------")
+    print("--------------------------------------------")
+    print("--------------------------------------------")
+
 
 max_key = max(lr_sum_dict, key=lr_sum_dict.get)
 
 print("Max Key: " + str(max_key))
 
-saved_results_file_path += "Layers_Frozen_" + str(frozen_layers) + '_'
+saved_results_file_path = "Layers_Frozen_" + str(frozen_layers) + '_'
 saved_results_file_path += "Runs_" + str(number_of_runs) + "_"
 saved_results_file_path += "FrozenEmbeddings_" + str(frozen_embeddings) + '_'
 saved_results_file_path += "ValidationScoring_" + str(validation_set_scoring) + '.json'
 
-with open('general_ner_classifier_results/' + model_choice + "/" + saved_results_file_path, 'w') as fp:
+############################################################
+
+results_folder_path = "general_ner_classifier_results/" + model_choice.replace("/", "-")
+if not os.path.isdir(results_folder_path):
+
+    print("Creating folder: " + results_folder_path)
+    os.mkdir(results_folder_path)
+
+    for dataset in classification_datasets:
+        os.mkdir(results_folder_path + "/" + dataset)
+
+############################################################
+
+with open('general_ner_classifier_results/' + model_choice.replace("/", "-") + "/" + saved_results_file_path, 'w') as fp:
     json.dump(learning_rate_to_results_dict, fp)
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -725,10 +770,42 @@ for dataset in classification_datasets:
 
     print("--------------------------------------------")
     print("Results for " + dataset)
-    print("Best LR: " + dataset_to_best_lr_dict[dataset]['best_lr'])
-    print("Best Micro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][0])
-    print("Best Macro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][1])
-    print("Micro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][0])
-    print("Macro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][1])
+    print("Best LR: " + str(dataset_to_best_lr_dict[dataset]['best_lr']))
+    print("Best Micro F1: " + str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][0]))
+    print("Best Macro F1: " + str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][1]))
+    print("Micro StD: " + str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0]))
+    print("Macro StD: " + str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1]))
     print("--------------------------------------------")
+
+print("-----------------------------------------------------------------")
+print("Final Results for Spreadsheet")
+print("-----------------------------------------------------------------")
+print("Dataset: " + dataset)
+print("Model: " + model_choice)
+print("Number of Runs: " + str(number_of_runs))
+print("Number of Epochs: " + str(num_epochs))
+print("Patience: " + str(patience_value))
+print("Number of Frozen Layers: " + str(frozen_layers))
+print("Frozen Embeddings: " + str(frozen_embeddings))
+print("Validation Set Choice: " + str(validation_set_scoring))
+print("-----------------------------------------------------------------")
+
+print("Learning Rates")
+for dataset in classification_datasets:
+
+    print(str(dataset_to_best_lr_dict[dataset]['best_lr']))
+
+print("-----------------------------------------------------------------")
+print("Micro and Macro F1 Scores")
+for dataset in classification_datasets:
+
+    print(str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][0])) 
+    print(str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][1])) 
+
+print("-----------------------------------------------------------------")
+print("Micro and Macro StDs")
+for dataset in classification_datasets:
+
+    print(str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0])) 
+    print(str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1])) 
 

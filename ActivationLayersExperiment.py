@@ -3,8 +3,8 @@ from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
 import torch
 from sklearn.metrics.pairwise import euclidean_distances
 
-tokenizer = AutoTokenizer.from_pretrained('nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large')
-model = AutoModel.from_pretrained('nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large', output_hidden_states=True)
+tokenizer = AutoTokenizer.from_pretrained('roberta-large')
+model = AutoModel.from_pretrained('roberta-large', output_hidden_states=True)
 
 inputs = tokenizer("Hello, my dog is so cute but he is very strange", return_tensors="pt")
 
@@ -32,8 +32,12 @@ total_difference_for_each_layer = []
 
 for i in range(0, len(second_output['hidden_states'])):
 
-	layer_difference = torch.nn.functional.cosine_similarity(first_output['hidden_states'][i][0], 
-													         second_output['hidden_states'][i][0])
+	#print(first_output['hidden_states'][i].shape)
+
+	layer_difference = 0
+	for j in range(0, len(first_output['hidden_states'][i])):
+		layer_difference +=  1 - torch.nn.functional.cosine_similarity(first_output['hidden_states'][i][j], 
+													         	  	   second_output['hidden_states'][i][j])
 
 	#layer_difference = euclidean_distances(first_output['hidden_states'][i][0], 
 	#									   second_output['hidden_states'][i][0])
@@ -47,26 +51,31 @@ for i in range(0, len(second_output['hidden_states'])):
 
 print("Total difference")
 print(len(total_difference_for_each_layer))
+#print(total_difference_for_each_layer)
 
-last_score = len(total_difference_for_each_layer[0])
-
+last_difference = sum(total_difference_for_each_layer[0])
 for i in range(0, len(total_difference_for_each_layer)):
 
 	difference = total_difference_for_each_layer[i]
 
 	print("Layer " + str(i))
-	print(difference)
-	print("Total Similarity Score: " + str(sum(difference) / len(difference)))
-	score_change = ((sum(difference) / len(difference))  - last_score) / last_score
-	print("Difference from last score: " + str(score_change))
-	last_score = sum(difference) / len(difference)
-	print("-------------------")
+	print(sum(difference))
+	comparison_to_last_difference = (sum(difference) - last_difference) / last_difference
+	print(str(comparison_to_last_difference))
+	last_difference = sum(difference)
+	print("-----------------------------")
 
 
+#####################################################################
 
-#print(model_encoding.__dict__)
-
-#print("---------------------------")
-
-#print("Activation Function")
-#print(model_encoding.encoder.layer[0].intermediate.intermediate_act_fn)
+import matplotlib.pyplot as plt
+   
+Year = [1920,1930,1940,1950,1960,1970,1980,1990,2000,2010]
+Unemployment_Rate = [9.8,12,8,7.2,6.9,7,6.5,6.2,5.5,6.3]
+  
+plt.plot(Year, Unemployment_Rate, color='red', marker='o')
+plt.title('Unemployment Rate Vs Year', fontsize=14)
+plt.xlabel('Year', fontsize=14)
+plt.ylabel('Unemployment Rate', fontsize=14)
+plt.grid(True)
+plt.show()

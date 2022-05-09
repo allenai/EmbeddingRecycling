@@ -128,13 +128,11 @@ class CustomBERTModel(nn.Module):
 
           ###########################################################
 
-          nonfinetuned_output = nonfinetuned_compact_model(input_ids, attention_mask=attention_mask)
-          nonfinetuned_embeddings = nonfinetuned_output['hidden_states'][0]
-          nonfinetuned_last_hidden_state = nonfinetuned_output['last_hidden_state']
+          embeddings_output = self.encoderModel.embeddings(input_ids)
 
           ###########################################################
 
-          combined_embeddings = nonfinetuned_embeddings + roberta_hidden_state_transformed
+          combined_embeddings = embeddings_output + roberta_hidden_state_transformed
 
           ###########################################################
 
@@ -336,12 +334,6 @@ for chosen_learning_rate in learning_rate_choices:
             finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path), strict=True)
 
         finetuned_roberta_model.to(device)
-
-        ############################################################
-
-        nonfinetuned_compact_model = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-
-        nonfinetuned_compact_model.to(device)
 
         ############################################################
 

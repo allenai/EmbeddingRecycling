@@ -28,6 +28,7 @@ import subprocess as sp
 import os
 
 from sklearn.model_selection import train_test_split
+import json
 
 ############################################################
 
@@ -51,25 +52,13 @@ class CustomBERTModel(nn.Module):
             embedding_size = 1024
             self.encoderModel = model_encoding
 
-          elif model_choice == "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune":
+          elif model_choice == "roberta-large" or model_choice == "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune":
 
             model_encoding = AutoModel.from_pretrained(model_choice)
             embedding_size = 1024
             self.encoderModel = model_encoding
 
-          elif model_choice == "roberta-large":
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 1024
-            self.encoderModel = model_encoding
-
-          elif model_choice == "nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large":
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 384
-            self.encoderModel = model_encoding
-
-          elif model_choice == "microsoft/deberta-v3-xsmall":
+          elif model_choice == "nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large" or model_choice == "microsoft/deberta-v3-xsmall":
 
             model_encoding = AutoModel.from_pretrained(model_choice)
             embedding_size = 384
@@ -176,11 +165,7 @@ class CustomBERTModel(nn.Module):
                    ids, 
                    attention_mask=mask)
 
-          #pooler_output = total_output['pooler_output']
           sequence_output = total_output['last_hidden_state']
-
-          #print("sequence output")
-          #print(sequence_output.shape)
 
           if self.average_hidden_state == True:
 
@@ -204,13 +189,7 @@ device = "cuda:0"
 device = torch.device(device)
 
 #classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
-classification_datasets = ['sciie-relation-extraction']
-#classification_datasets = ['chemprot', 'sci-cite']
-#classification_datasets = ['sci-cite', 'sciie-relation-extraction']
-#classification_datasets = ['chemprot']
-#classification_datasets = ['sci-cite']
-#classification_datasets = ['sciie-relation-extraction']
-#classification_datasets = ['mag']
+classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 
 num_epochs = 50 #1000 #10
 patience_value = 5 #10 #3
@@ -218,15 +197,15 @@ current_dropout = True
 number_of_runs = 3 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
-frozen_embeddings = False
+frozen_layers = 2 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_embeddings = True
 average_hidden_state = False
 
 validation_set_scoring = True
 random_state = 42
 
-learning_rate_choices = [2e-5]
-#learning_rate_choices = [0.0001, 0.00001, 2e-5, 5e-5, 5e-6]
+#learning_rate_choices = [2e-5]
+learning_rate_choices = [0.0001, 0.00001, 2e-5, 5e-5, 5e-6]
 #learning_rate_choices = [0.00001, 5e-5, 1e-6, 5e-6] # For RoBERTa and T5-3b full finetuned
 
  
@@ -694,10 +673,27 @@ for chosen_learning_rate in learning_rate_choices:
     learning_rate_to_results_dict[str(chosen_learning_rate)] = current_learning_rate_results
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ############################################################
 
 print("-----------------------------------------------------------------")
-print("Final Results for Learning Rate Tuning")
+print("Results for Learning Rate Tuning")
 print("-----------------------------------------------------------------")
 
 lr_sum_dict = {}
@@ -728,13 +724,39 @@ max_key = max(lr_sum_dict, key=lr_sum_dict.get)
 
 print("Max Key: " + str(max_key))
 
-saved_results_file_path += "Layers_Frozen_" + str(frozen_layers) + '_'
+saved_results_file_path = "Layers_Frozen_" + str(frozen_layers) + '_'
 saved_results_file_path += "Runs_" + str(number_of_runs) + "_"
 saved_results_file_path += "FrozenEmbeddings_" + str(frozen_embeddings) + '_'
 saved_results_file_path += "ValidationScoring_" + str(validation_set_scoring) + '.json'
 
-with open('general_linear_classifier_results/' + model_choice + "/" + saved_results_file_path, 'w') as fp:
+############################################################
+
+results_folder_path = "general_linear_classifier_results/" + model_choice.replace("/", "-")
+if not os.path.isdir(results_folder_path):
+
+    print("Creating folder: " + results_folder_path)
+    os.mkdir(results_folder_path)
+
+    for dataset in classification_datasets:
+        os.mkdir(results_folder_path + "/" + dataset)
+
+############################################################
+
+with open('general_linear_classifier_results/' + model_choice.replace("/", "-") + "/" + saved_results_file_path, 'w') as fp:
     json.dump(learning_rate_to_results_dict, fp)
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ############################################################
@@ -770,13 +792,44 @@ for dataset in classification_datasets:
 
     print("--------------------------------------------")
     print("Results for " + dataset)
-    print("Best LR: " + dataset_to_best_lr_dict[dataset]['best_lr'])
-    print("Best Micro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][0])
-    print("Best Macro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][1])
-    print("Micro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][0])
-    print("Macro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][1])
+    print("Best LR: " + str(dataset_to_best_lr_dict[dataset]['best_lr']))
+    print("Best Micro F1: " + str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][0]))
+    print("Best Macro F1: " + str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][1]))
+    print("Micro StD: " + str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0]))
+    print("Macro StD: " + str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1]))
     print("--------------------------------------------")
 
+print("-----------------------------------------------------------------")
+print("Final Results for Spreadsheet")
+print("-----------------------------------------------------------------")
+print("Dataset: " + dataset)
+print("Model: " + model_choice)
+print("Number of Runs: " + str(number_of_runs))
+print("Number of Epochs: " + str(num_epochs))
+print("Patience: " + str(patience_value))
+print("Number of Frozen Layers: " + str(frozen_layers))
+print("Frozen Embeddings: " + str(frozen_embeddings))
+print("Validation Set Choice: " + str(validation_set_scoring))
+print("-----------------------------------------------------------------")
+
+print("Learning Rates")
+for dataset in classification_datasets:
+
+    print(str(dataset_to_best_lr_dict[dataset]['best_lr']))
+
+print("-----------------------------------------------------------------")
+print("Micro and Macro F1 Scores")
+for dataset in classification_datasets:
+
+    print(str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][0])) 
+    print(str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][1])) 
+
+print("-----------------------------------------------------------------")
+print("Micro and Macro StDs")
+for dataset in classification_datasets:
+
+    print(str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0])) 
+    print(str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1])) 
 
 
 
