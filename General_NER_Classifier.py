@@ -142,10 +142,10 @@ learning_rate_choices = [0.0001, 0.00001, 5e-5, 5e-6]
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
-#checkpoint_path = 'checkpoint_scibert_ner_2111.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#assigned_batch_size = 32 #16
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True, model_max_length=512)
+checkpoint_path = 'checkpoint_scibert_ner_2111.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
+model_choice = 'allenai/scibert_scivocab_uncased'
+assigned_batch_size = 32 #16
+tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True, model_max_length=512)
 
 #checkpoint_path = 'checkpoint_minilm_768_ner_115.pt'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
@@ -157,10 +157,10 @@ learning_rate_choices = [0.0001, 0.00001, 5e-5, 5e-6]
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
 
-checkpoint_path = 'checkpoint_distilbert_ner_114.pt'
-model_choice = "distilbert-base-uncased"
-assigned_batch_size = 16
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+#checkpoint_path = 'checkpoint_distilbert_ner_115.pt'
+#model_choice = "distilbert-base-uncased"
+#assigned_batch_size = 16
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #checkpoint_path = 'checkpoint_deberta_small_ner_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 #model_choice = 'microsoft/deberta-v3-small'
@@ -682,6 +682,53 @@ max_key = max(lr_sum_dict, key=lr_sum_dict.get)
 
 print("Max Key: " + str(max_key))
 
-with open('general_ner_classifier_results/' + model_choice + '_' + checkpoint_path + '.json', 'w') as fp:
+saved_results_file_path += "Layers_Frozen_" + str(frozen_layers) + '_'
+saved_results_file_path += "Runs_" + str(number_of_runs) + "_"
+saved_results_file_path += "FrozenEmbeddings_" + str(frozen_embeddings) + '_'
+saved_results_file_path += "ValidationScoring_" + str(validation_set_scoring) + '.json'
+
+with open('general_ner_classifier_results/' + model_choice + "/" + saved_results_file_path, 'w') as fp:
     json.dump(learning_rate_to_results_dict, fp)
+
+
+
+############################################################
+
+print("-----------------------------------------------------------------")
+print("Final Results: Best LR for each dataset")
+print("-----------------------------------------------------------------")
+
+dataset_to_best_lr_dict = {}
+
+for dataset in classification_datasets:
+
+    best_lr = learning_rate_choices[0]
+    best_combined_f1 = [0, 0]
+    best_combined_stds = [0, 0]
+
+    for chosen_learning_rate in learning_rate_choices:
+
+        current_combined_macro_micro_f1 = [learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_average"],
+                                           learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_average"]]
+
+        if sum(best_combined_f1) < sum(current_combined_macro_micro_f1):
+            best_lr = chosen_learning_rate
+            best_combined_f1 = current_combined_macro_micro_f1
+            best_combined_stds = [learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_std"],
+                                  learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_std"]]
+
+    dataset_to_best_lr_dict[dataset] = {
+                                            'best_lr': best_lr,
+                                            'best_combined_f1': best_combined_f1,
+                                            'best_combined_stds': best_combined_stds
+                                       }
+
+    print("--------------------------------------------")
+    print("Results for " + dataset)
+    print("Best LR: " + dataset_to_best_lr_dict[dataset]['best_lr'])
+    print("Best Micro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][0])
+    print("Best Macro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][1])
+    print("Micro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][0])
+    print("Macro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][1])
+    print("--------------------------------------------")
 

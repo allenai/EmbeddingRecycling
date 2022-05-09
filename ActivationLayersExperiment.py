@@ -3,8 +3,8 @@ from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
 import torch
 from sklearn.metrics.pairwise import euclidean_distances
 
-tokenizer = AutoTokenizer.from_pretrained('roberta-large')
-model = AutoModel.from_pretrained('roberta-large', output_hidden_states=True)
+tokenizer = AutoTokenizer.from_pretrained('nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large')
+model = AutoModel.from_pretrained('nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large', output_hidden_states=True)
 
 inputs = tokenizer("Hello, my dog is so cute but he is very strange", return_tensors="pt")
 

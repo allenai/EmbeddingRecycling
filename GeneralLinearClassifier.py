@@ -204,7 +204,7 @@ device = "cuda:0"
 device = torch.device(device)
 
 #classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+classification_datasets = ['sciie-relation-extraction']
 #classification_datasets = ['chemprot', 'sci-cite']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
@@ -218,84 +218,70 @@ current_dropout = True
 number_of_runs = 3 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 2 #12 layers for BERT total, 24 layers for T5 and RoBERTa
-frozen_embeddings = True
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_embeddings = False
 average_hidden_state = False
 
 validation_set_scoring = True
 random_state = 42
 
-#learning_rate_choices = [5e-5]
-learning_rate_choices = [0.0001, 0.00001, 5e-5, 5e-6]
+learning_rate_choices = [2e-5]
+#learning_rate_choices = [0.0001, 0.00001, 2e-5, 5e-5, 5e-6]
 #learning_rate_choices = [0.00001, 5e-5, 1e-6, 5e-6] # For RoBERTa and T5-3b full finetuned
 
  
-#checkpoint_path = 'checkpoint17.pt' #11, 12, 13, 15, 17, 18
 #model_choice = "t5-3b"
 #assigned_batch_size = 2
 #tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint22.pt'
 #model_choice = 'bert-base-uncased'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint_scibert_32.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint47.pt' # 42, 43, 44, 45, 46, 47, 48, 49
 #model_choice = 'roberta-large'
 #assigned_batch_size = 16
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint_deberta_small_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 #model_choice = 'microsoft/deberta-v3-small'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint_deberta_xsmall_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 #model_choice = 'microsoft/deberta-v3-xsmall'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint401.pt' # 42, 43, 44, 45, 46, 47, 48, 49
 #model_choice = 'distilroberta-base'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint105.pt' #'checkpoint44.pt'
 #model_choice = 'sentence-transformers/sentence-t5-base'
 #assigned_batch_size = 32
 #tokenizer = SentenceTransformer(model_choice, device='cuda').tokenizer 
 
-#checkpoint_path = 'checkpoint_minilm_384_104.pt'
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint_minilm_768_121.pt'
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-checkpoint_path = 'checkpoints/checkpoint_distilbert_1051.pt'
-model_choice = "distilbert-base-uncased"
+model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 assigned_batch_size = 32
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint_t5-small_101.pt'
+#model_choice = "distilbert-base-uncased"
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
 #model_choice = "t5-small"
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint208.pt' #'checkpoint205.pt' #'checkpoint44.pt'
 #model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
 #assigned_batch_size = 4
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#model_choice = 'hivemind/gpt-j-6B-8bit'
 #tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
 #model_encoding = AutoModel.from_pretrained(model_choice)
 #embedding_size = 4096
@@ -322,8 +308,18 @@ for chosen_learning_rate in learning_rate_choices:
 
     for dataset in classification_datasets:
 
-        #checkpoint_path = "new_pretrained_" + model_choice + "_" + dataset + "_for_Scibert_mapping.pt"
-        #model_encoder_path = "pretrained_encoder_" + model_choice + "_" + dataset + "_for_Scibert_mapping.pt"
+        dataset_folder_path = "checkpoints/" + model_choice.replace("/", "-")
+        if not os.path.isdir(dataset_folder_path):
+
+            print("Creating folder: " + dataset_folder_path)
+            os.mkdir(dataset_folder_path)
+
+            for dataset in classification_datasets:
+                os.mkdir(dataset_folder_path + "/" + dataset)
+
+        checkpoint_path = "checkpoints/" + model_choice.replace("/", "-") + "/" + dataset + "/" + str(chosen_learning_rate) + "_"
+        checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
+        checkpoint_path += str(validation_set_scoring) + ".pt"
 
         print("GPU Memory available at the start")
         print(get_gpu_memory())
@@ -724,15 +720,62 @@ for chosen_learning_rate in learning_rate_choices:
 
     lr_sum_dict[str(chosen_learning_rate)] = current_lr_sum
 
-    ("--------------------------------------------")
-    ("--------------------------------------------")
+    print("--------------------------------------------")
+    print("--------------------------------------------")
+
 
 max_key = max(lr_sum_dict, key=lr_sum_dict.get)
 
 print("Max Key: " + str(max_key))
 
-with open('general_linear_classifier_results/' + model_choice + '_' + checkpoint_path + '.json', 'w') as fp:
+saved_results_file_path += "Layers_Frozen_" + str(frozen_layers) + '_'
+saved_results_file_path += "Runs_" + str(number_of_runs) + "_"
+saved_results_file_path += "FrozenEmbeddings_" + str(frozen_embeddings) + '_'
+saved_results_file_path += "ValidationScoring_" + str(validation_set_scoring) + '.json'
+
+with open('general_linear_classifier_results/' + model_choice + "/" + saved_results_file_path, 'w') as fp:
     json.dump(learning_rate_to_results_dict, fp)
+
+
+############################################################
+
+print("-----------------------------------------------------------------")
+print("Final Results: Best LR for each dataset")
+print("-----------------------------------------------------------------")
+
+dataset_to_best_lr_dict = {}
+
+for dataset in classification_datasets:
+
+    best_lr = learning_rate_choices[0]
+    best_combined_f1 = [0, 0]
+    best_combined_stds = [0, 0]
+
+    for chosen_learning_rate in learning_rate_choices:
+
+        current_combined_macro_micro_f1 = [learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_average"],
+                                           learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_average"]]
+
+        if sum(best_combined_f1) < sum(current_combined_macro_micro_f1):
+            best_lr = chosen_learning_rate
+            best_combined_f1 = current_combined_macro_micro_f1
+            best_combined_stds = [learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_std"],
+                                  learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_std"]]
+
+    dataset_to_best_lr_dict[dataset] = {
+                                            'best_lr': best_lr,
+                                            'best_combined_f1': best_combined_f1,
+                                            'best_combined_stds': best_combined_stds
+                                       }
+
+    print("--------------------------------------------")
+    print("Results for " + dataset)
+    print("Best LR: " + dataset_to_best_lr_dict[dataset]['best_lr'])
+    print("Best Micro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][0])
+    print("Best Macro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][1])
+    print("Micro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][0])
+    print("Macro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][1])
+    print("--------------------------------------------")
 
 
 

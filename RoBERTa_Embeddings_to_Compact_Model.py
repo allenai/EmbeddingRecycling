@@ -115,18 +115,33 @@ class CustomBERTModel(nn.Module):
           self.average_hidden_state = average_hidden_state
 
           #self.encoderModel = self.encoderModel.encoder
+          #print("self.encoderModel")
+          #print(self.encoderModel.__dict__)
 
 
           
 
-    def forward(self, ids, mask, roberta_ids, roberta_mask):
+    def forward(self, input_ids, attention_mask, roberta_ids, roberta_mask):
 
-          compact_embeddings = self.encoderModel(ids, attention_mask=mask)
-          combined_embeddings = compact_embeddings['hidden_states'][0]
+          roberta_hidden_state = finetuned_roberta_model(roberta_ids, roberta_mask)['hidden_states'][0]
+          roberta_hidden_state_transformed = self.roberta_mlp(roberta_hidden_state) / roberta_divisor
 
-          total_output = self.encoderModel.encoder(combined_embeddings)
+          ###########################################################
 
-          compact_model_output = total_output['last_hidden_state']
+          nonfinetuned_output = nonfinetuned_compact_model(input_ids, attention_mask=attention_mask)
+          nonfinetuned_embeddings = nonfinetuned_output['hidden_states'][0]
+          nonfinetuned_last_hidden_state = nonfinetuned_output['last_hidden_state']
+
+          ###########################################################
+
+          combined_embeddings = nonfinetuned_embeddings + roberta_hidden_state_transformed
+
+          ###########################################################
+
+          extended_attention_mask = self.encoderModel.get_extended_attention_mask(attention_mask, combined_embeddings.size()[:-1], device)
+          last_hidden_state = self.encoderModel.encoder(combined_embeddings, extended_attention_mask)['last_hidden_state']
+
+          compact_model_output = last_hidden_state
           compact_model_output = compact_model_output[:,0,:].view(-1, self.embedding_size)
 
           linear1_output = self.linear1(compact_model_output)
@@ -139,6 +154,7 @@ class CustomBERTModel(nn.Module):
 ############################################################
 
 device = "cuda:0"
+#device = "cpu"
 device = torch.device(device)
 
 #classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
@@ -152,7 +168,7 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 num_epochs = 50 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 1 #1 #5
+number_of_runs = 3 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
@@ -164,49 +180,32 @@ validation_set_scoring = True
 random_state = 42
 
 #learning_rate_choices = [0.0001, 0.00001, 2e-5, 5e-5, 5e-6]
-learning_rate_choices = [0.00005]
+learning_rate_choices = [0.0001, 0.00001, 2e-5, 5e-5, 5e-6]
 
-
-
-
-
-
-
-
-
-
-
+############################################################
 
 load_finetuned_roberta = False
 include_compact_embeddings = True
 normalize_embeddings = False
 
-#finetuned_model_choice = 'allenai/scibert_scivocab_uncased'
-#finetuned_embeddings_size = 768
+finetuned_model_choice = 'allenai/scibert_scivocab_uncased'
+finetuned_embeddings_size = 768
 
-finetuned_model_choice = 'roberta-large'
-finetuned_embeddings_size = 1024
+#finetuned_model_choice = 'roberta-large'
+#finetuned_embeddings_size = 1024
+roberta_divisor = 100 #100, 50, 25, 10, 5, 1
 
-
-
-
-
-
-
-
-
+############################################################
 
 #checkpoint_path = 'checkpoints/checkpoint_scibert_mapping_1338.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #assigned_batch_size = 8
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-checkpoint_path = 'checkpoints/checkpoint_minilm_768_126_mapping.pt'
+checkpoint_path = 'checkpoints/checkpoint_minilm_768_131_mapping.pt'
 model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-
 
 
 ############################################################
@@ -261,6 +260,7 @@ for chosen_learning_rate in learning_rate_choices:
         print("Adding compact embeddings: " + str(include_compact_embeddings))
         print("Normalize Embeddings: " + str(normalize_embeddings))
         print("Added Model Choice: " + str(finetuned_model_choice))
+        print("RoBERTa divisor: " + str(roberta_divisor))
 
         # Chemprot train, dev, and test
         with open('text_classification/' + dataset + '/train.txt') as f:
@@ -394,6 +394,10 @@ for chosen_learning_rate in learning_rate_choices:
         tokenized_datasets.set_format("torch")
 
 
+        
+
+
+
         ############################################################
 
         micro_averages = []
@@ -469,7 +473,6 @@ for chosen_learning_rate in learning_rate_choices:
 
                 progress_bar = tqdm(range(len(train_dataloader)))
 
-
                 model.train()
                 for batch in train_dataloader:
 
@@ -478,7 +481,7 @@ for chosen_learning_rate in learning_rate_choices:
                         #batch = {k: v.to(device) for k, v in batch.items()}
                         labels = batch['labels'].to(device)
 
-                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
+                        new_batch = {'input_ids': batch['input_ids'].to(device), 'attention_mask': batch['attention_mask'].to(device), 
                                      'roberta_ids': batch['roberta_input_ids'].to(device),
                                      'roberta_mask': batch['roberta_attention_mask'].to(device)}
                         outputs = model(**new_batch)
@@ -504,7 +507,7 @@ for chosen_learning_rate in learning_rate_choices:
                         #batch = {k: v.to(device) for k, v in batch.items()}
                         labels = batch['labels'].to(device)
 
-                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
+                        new_batch = {'input_ids': batch['input_ids'].to(device), 'attention_mask': batch['attention_mask'].to(device), 
                                      'roberta_ids': batch['roberta_input_ids'].to(device),
                                      'roberta_mask': batch['roberta_attention_mask'].to(device)}
                         outputs = model(**new_batch)
@@ -575,7 +578,7 @@ for chosen_learning_rate in learning_rate_choices:
                     #batch = {k: v.to(device) for k, v in batch.items()}
                     labels = batch['labels'].to(device)
 
-                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
+                    new_batch = {'input_ids': batch['input_ids'].to(device), 'attention_mask': batch['attention_mask'].to(device), 
                                  'roberta_ids': batch['roberta_input_ids'].to(device),
                                  'roberta_mask': batch['roberta_attention_mask'].to(device)}
 
@@ -652,35 +655,40 @@ for chosen_learning_rate in learning_rate_choices:
 ############################################################
 
 print("-----------------------------------------------------------------")
-print("Final Results for Learning Rate Tuning")
+print("Final Results: Best LR for each dataset")
 print("-----------------------------------------------------------------")
 
-lr_sum_dict = {}
+dataset_to_best_lr_dict = {}
 
-for chosen_learning_rate in learning_rate_choices:
+for dataset in classification_datasets:
 
-    current_lr_sum = 0
+    best_lr = learning_rate_choices[0]
+    best_combined_f1 = [0, 0]
+    best_combined_stds = [0, 0]
 
-    for dataset in classification_datasets:
+    for chosen_learning_rate in learning_rate_choices:
 
-        print("Results for " + str(chosen_learning_rate) + " for " + dataset)
-        print(dataset + "_micro_f1_average: " + str(learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_average"]))
-        print(dataset + "_micro_f1_std: " + str(learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_std"]))
-        print(dataset + "_macro_f1_average: " + str(learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_average"]))
-        print(dataset + "_macro_f1_std: " + str(learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_std"]))
-        print("--------------------------------------------")
+        current_combined_macro_micro_f1 = [learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_average"],
+                                           learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_average"]]
 
-        current_lr_sum += learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_average"]
-        current_lr_sum += learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_average"]
+        if sum(best_combined_f1) < sum(current_combined_macro_micro_f1):
+            best_lr = chosen_learning_rate
+            best_combined_f1 = current_combined_macro_micro_f1
+            best_combined_stds = [learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_std"],
+                                  learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_std"]]
 
-    lr_sum_dict[str(chosen_learning_rate)] = current_lr_sum
+    dataset_to_best_lr_dict[dataset] = {
+                                            'best_lr': best_lr,
+                                            'best_combined_f1': best_combined_f1,
+                                            'best_combined_stds': best_combined_stds
+                                       }
 
-    ("--------------------------------------------")
-    ("--------------------------------------------")
+    print("--------------------------------------------")
+    print("Results for " + dataset)
+    print("Best LR: " + dataset_to_best_lr_dict[dataset]['best_lr'])
+    print("Best Micro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][0])
+    print("Best Macro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][1])
+    print("Micro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][0])
+    print("Macro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][1])
+    print("--------------------------------------------")
 
-max_key = max(lr_sum_dict, key=lr_sum_dict.get)
-
-print("Max Key: " + str(max_key))
-
-with open('compact_model_combo_results/' + model_choice + '_' + checkpoint_path + '.json', 'w') as fp:
-    json.dump(learning_rate_to_results_dict, fp)

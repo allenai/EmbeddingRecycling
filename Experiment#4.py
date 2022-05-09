@@ -106,28 +106,22 @@ class CustomBERTModel(nn.Module):
           self.embedding_size = embedding_size
           self.average_hidden_state = average_hidden_state
 
-          print("Number of layers in the encoder: " + str(len(self.encoderModel.encoder.layer)))
-          
-          self.encoderModel = self.encoderModel.encoder
-          self.encoderModel.layer = self.encoderModel.layer[13:]
-
 
           
 
-    def forward(self, ids, mask, roberta_ids, roberta_mask):
+    def forward(self, input_ids, attention_mask, roberta_ids, roberta_mask):
 
-          roberta_embeddings = finetuned_roberta_model(roberta_ids, attention_mask=roberta_mask)
-          roberta_embeddings = roberta_embeddings['hidden_states'][12]
+          roberta_embeddings = finetuned_roberta_model(roberta_ids, roberta_mask)['hidden_states'][0]
 
-          ################################################
+          ###########################################################
 
-          combined_embeddings = roberta_embeddings
-          
-          total_output = self.encoderModel(combined_embeddings)
-          scibert_output = total_output['last_hidden_state']
-          scibert_output = scibert_output[:,0,:].view(-1, self.embedding_size)
+          extended_attention_mask = self.encoderModel.get_extended_attention_mask(attention_mask, roberta_embeddings.size()[:-1], device)
+          last_hidden_state = self.encoderModel.encoder(roberta_embeddings, extended_attention_mask)['last_hidden_state']
 
-          linear1_output = self.linear1(scibert_output)
+          compact_model_output = last_hidden_state
+          compact_model_output = compact_model_output[:,0,:].view(-1, self.embedding_size)
+
+          linear1_output = self.linear1(compact_model_output)
           linear2_output = self.linear2(linear1_output)
 
           return linear2_output
@@ -137,12 +131,13 @@ class CustomBERTModel(nn.Module):
 ############################################################
 
 device = "cuda:0"
+#device = "cpu"
 device = torch.device(device)
 
 #classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
+#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+#classification_datasets = ['chemprot', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot', 'sci-cite']
-#classification_datasets = ['sci-cite', 'sciie-relation-extraction']
-classification_datasets = ['chemprot', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
@@ -150,30 +145,52 @@ classification_datasets = ['chemprot', 'sciie-relation-extraction']
 #classification_datasets = ['mag']
 
 num_epochs = 50 #1000 #10
-patience_value = 10 #10 #3
+patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 3 #1 #5
 frozen_choice = False
-chosen_learning_rate = 2e-5 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
+#chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 
 validation_set_scoring = True
 
-load_finetuned_roberta = True
-
 random_state = 42
 
+#learning_rate_choices = [0.0001, 0.00001, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [2e-5, 5e-5, 5e-6]
 
+############################################################
 
+load_finetuned_roberta = True
+include_compact_embeddings = True
+normalize_embeddings = False
 
-checkpoint_path = 'checkpoints/checkpoint48.pt' # 42, 43, 44, 45, 46, 47, 48, 49
+#finetuned_model_choice = 'allenai/scibert_scivocab_uncased'
+#finetuned_embeddings_size = 768
+
+finetuned_model_choice = 'roberta-large'
+finetuned_embeddings_size = 1024
+data_set_of_finetune = 'chemprot'
+classification_datasets = ['sci-cite', 'sciie-relation-extraction'] #['chemprot', 'sci-cite', 'sciie-relation-extraction']
+
+############################################################
+
+#checkpoint_path = 'checkpoints/checkpoint_scibert_mapping_1338.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+#model_choice = 'allenai/scibert_scivocab_uncased'
+#assigned_batch_size = 8
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+#checkpoint_path = 'checkpoints/checkpoint_minilm_768_131_mapping.pt'
+#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+#assigned_batch_size = 8
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+checkpoint_path = 'checkpoints/checkpoint_roberta_reuse_1313.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 model_choice = 'roberta-large'
-assigned_batch_size = 16
+assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-
 
 
 ############################################################
@@ -192,398 +209,472 @@ def roberta_tokenize_function(examples):
 
 ############################################################
 
+learning_rate_to_results_dict = {}
+
+for chosen_learning_rate in learning_rate_choices:
+
+    print("--------------------------------------------------------------------------")
+    print("Starting new learning rate: " + str(chosen_learning_rate))
+    print("--------------------------------------------------------------------------")
+
+    current_learning_rate_results = {}
+
+    for dataset in classification_datasets:
+
+        ###############################################################
+
+        execution_start = time.time()
+
+        print("GPU Memory available at the start")
+        print(get_gpu_memory())
+
+        print("Dataset: " + dataset)
+        print("Model: " + model_choice)
+        print("Dropout: " + str(current_dropout))
+        print("Frozen Choice: " + str(frozen_choice))
+        print("Number of Runs: " + str(number_of_runs))
+        print('Learning Rate: ' + str(chosen_learning_rate))
+        print("Checkpoint Path: " + checkpoint_path)
+        print("Number of Frozen Layers: " + str(frozen_layers))
+        print("Frozen Embeddings: " + str(frozen_embeddings))
+        print("Patience: " + str(patience_value))
+        print("Average Hidden Layers: " + str(average_hidden_state))
+        print("Validation Set Choice: " + str(validation_set_scoring))
+        print("Number of Epochs: " + str(num_epochs))
+        print("Loading Finetuned Embeddings: " + str(load_finetuned_roberta))
+        print("Adding compact embeddings: " + str(include_compact_embeddings))
+        print("Normalize Embeddings: " + str(normalize_embeddings))
+        print("Added Model Choice: " + str(finetuned_model_choice))
+        print("data_set_of_finetune: " + str(data_set_of_finetune))
+
+        # Chemprot train, dev, and test
+        with open('text_classification/' + dataset + '/train.txt') as f:
+
+            train_set = f.readlines()
+            train_set = [ast.literal_eval(line) for line in train_set]
+            train_set_text = [line['text'] for line in train_set]
+            train_set_label = [line['label'] for line in train_set]
+
+        with open('text_classification/' + dataset + '/dev.txt') as f:
+            
+            dev_set = f.readlines()
+            dev_set = [ast.literal_eval(line) for line in dev_set]
+
+            dev_set_text = []
+            dev_set_label = []
+            for line in dev_set:
+
+                # Fix bug in MAG dev where there is a single label called "category"
+                if line['label'] != 'category':
+                    dev_set_text.append(line['text'])
+                    dev_set_label.append(line['label'])
+                else:
+                    print("Found the error with category")
+
+
+        with open('text_classification/' + dataset + '/test.txt') as f:
+            
+            test_set = f.readlines()
+            test_set = [ast.literal_eval(line) for line in test_set]
+            test_set_text = [line['text'] for line in test_set]
+            test_set_label = [line['label'] for line in test_set]
+
+
+        ############################################################
+
+        labels_list = sorted(list(set(train_set_label)))
+        dev_label_list = sorted(list(set(dev_set_label)))
+        test_label_list = sorted(list(set(test_set_label)))
+
+        print("Label Lists")
+        print(labels_list)
+        print(dev_label_list)
+        print(test_label_list)
+
+        label_to_value_dict = {}
+
+        count = 0
+        for label in labels_list:
+          label_to_value_dict[label] = count
+          count += 1
+
+        train_set_label = [label_to_value_dict[label] for label in train_set_label]
+        dev_set_label = [label_to_value_dict[label] for label in dev_set_label]
+        test_set_label = [label_to_value_dict[label] for label in test_set_label]
+
+        print("Size of train, dev, and test sets")
+        print(len(train_set_label))
+        print(len(dev_set_label))
+        print(len(test_set_label))
+
+        ############################################################
+
+        # Load pretrained, finetuned RoBERTa-Large encoder
+
+        finetuned_roberta_model = AutoModel.from_pretrained(finetuned_model_choice, output_hidden_states=True)
+        roberta_tokenizer = AutoTokenizer.from_pretrained(finetuned_model_choice, model_max_length=512)
+
+        if load_finetuned_roberta == True:
+
+            #finetuned_roberta_path = "../../../net/nfs2.s2-research/jons/prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
+            #finetuned_roberta_path = "./prefinetuned_RoBERTa/new_pretrained_roberta-large_" + dataset + "_for_Scibert_mapping.pt"
+            finetuned_roberta_path = "./pretrained_roberta_for_experiment4/" + data_set_of_finetune #dataset
+            finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path), strict=True)
+
+        finetuned_roberta_model.to(device)
+
+        ############################################################
+
+        nonfinetuned_compact_model = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+
+        nonfinetuned_compact_model.to(device)
+
+        ############################################################
+
+        if validation_set_scoring == True:
+
+            training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
+            train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)
+            train.reset_index(drop=True, inplace=True)
+            validation.reset_index(drop=True, inplace=True)
+
+            training_dataset_pandas = train#[:1000]
+            training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
+            training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+
+            validation_dataset_pandas = validation#[:1000]
+            validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
+            validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
+
+            test_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})
+            test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
+            test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
+
+        else:
+
+            training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
+            training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
+            training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+
+            validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
+            validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
+            validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
+
+            test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
+            test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
+            test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
+
+
+        ############################################################
+
+
+        classification_dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 
+                                        'validation': validation_dataset_arrow, 
+                                        'test' : test_dataset_arrow})
+        
+        tokenized_datasets = classification_dataset.map(roberta_tokenize_function, batched=True)
+        tokenized_datasets = tokenized_datasets.map(tokenize_function, batched=True)
+
+        tokenized_datasets = tokenized_datasets.remove_columns(["text"])
+        tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
+        tokenized_datasets.set_format("torch")
+
+
+        
+
+
+
+        ############################################################
+
+        micro_averages = []
+        macro_averages = []
+        inference_times = []
+
+        for i in range(0, number_of_runs):
+
+            run_start = time.time()
+
+            print("Loading Model")
+
+            train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
+            validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
+            eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
+
+            print("Number of labels: " + str(len(set(train_set_label))))
+
+            ############################################################
+
+            model = CustomBERTModel(len(set(train_set_label)), model_choice, current_dropout, 
+                                    frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings)
+
+            model.to(device)
+
+            ############################################################
+
+
+            #optimizer = AdamW(model.parameters(), lr=5e-5)
+
+            criterion = nn.CrossEntropyLoss()
+            optimizer = Adam(model.parameters(), lr=chosen_learning_rate) #5e-6
+            #optimizer = Adam(model.parameters(), lr=1e-5) #5e-6
+
+            num_training_steps = num_epochs * len(train_dataloader)
+
+            lr_scheduler = get_scheduler(
+                name="linear", optimizer=optimizer, num_warmup_steps=100, num_training_steps=num_training_steps
+            )
+
+            ############################################################
+
+
+
+            # to track the training loss as the model trains
+            train_losses = []
+            # to track the validation loss as the model trains
+            valid_losses = []
+            # to track the average training loss per epoch as the model trains
+            avg_train_losses = []
+            # to track the average validation loss per epoch as the model trains
+            avg_valid_losses = []
+
+
+            # import EarlyStopping
+            from pytorchtools import EarlyStopping
+            # initialize the early_stopping object
+            early_stopping = EarlyStopping(patience=patience_value, verbose=True, path=checkpoint_path)
+            #early_stopping = EarlyStopping(patience=10, verbose=True)
+
+            print("Checkpoint Path: " + checkpoint_path)
+
+
+            print("Beginning Training")
+
+            total_epochs_performed = 0
+
+            for epoch in range(num_epochs):
+
+                total_epochs_performed += 1
+
+                print("Current Epoch: " + str(epoch))
+
+                progress_bar = tqdm(range(len(train_dataloader)))
+
+                model.train()
+                for batch in train_dataloader:
+
+                    #with torch.no_grad():
+                    
+                        #batch = {k: v.to(device) for k, v in batch.items()}
+                        labels = batch['labels'].to(device)
+
+                        new_batch = {'input_ids': batch['input_ids'].to(device), 'attention_mask': batch['attention_mask'].to(device), 
+                                     'roberta_ids': batch['roberta_input_ids'].to(device),
+                                     'roberta_mask': batch['roberta_attention_mask'].to(device)}
+                        outputs = model(**new_batch)
+
+                        loss = criterion(outputs, labels)
+
+                        loss.backward()
+                        optimizer.step()
+                        lr_scheduler.step()
+                        optimizer.zero_grad()
+                        progress_bar.update(1)
+
+                        train_losses.append(loss.item())
+
+
+                progress_bar = tqdm(range(len(validation_dataloader)))
+
+                model.eval()
+                for batch in validation_dataloader:
+
+                    #with torch.no_grad():
+                    
+                        #batch = {k: v.to(device) for k, v in batch.items()}
+                        labels = batch['labels'].to(device)
+
+                        new_batch = {'input_ids': batch['input_ids'].to(device), 'attention_mask': batch['attention_mask'].to(device), 
+                                     'roberta_ids': batch['roberta_input_ids'].to(device),
+                                     'roberta_mask': batch['roberta_attention_mask'].to(device)}
+                        outputs = model(**new_batch)
+
+                        loss = criterion(outputs, labels)
+                        progress_bar.update(1)
+
+                        valid_losses.append(loss.item())
+
+
+                # print training/validation statistics 
+                # calculate average loss over an epoch
+                train_loss = np.average(train_losses)
+                valid_loss = np.average(valid_losses)
+                avg_train_losses.append(train_loss)
+                avg_valid_losses.append(valid_loss)
+                
+                epoch_len = len(str(num_epochs))
+                
+                print_msg = (f'[{epoch:>{epoch_len}}/{num_epochs:>{epoch_len}}] ' +
+                             f'train_loss: {train_loss:.5f} ' +
+                             f'valid_loss: {valid_loss:.5f}')
+                
+                print(print_msg)
+                
+                # clear lists to track next epoch
+                train_losses = []
+                valid_losses = []
+                
+                # early_stopping needs the validation loss to check if it has decresed, 
+                # and if it has, it will make a checkpoint of the current model
+                early_stopping(valid_loss, model)
+                
+                if early_stopping.early_stop:
+                    print("Early stopping")
+                    break
+
+
+
+            ############################################################
+
+            print("Loading the Best Model")
+
+            model.load_state_dict(torch.load(checkpoint_path))
+
+
+
+            ############################################################
+
+            print("Beginning Evaluation")
+
+            metric = load_metric("accuracy")
+            #model.eval()
+
+            total_predictions = torch.FloatTensor([]).to(device)
+            total_references = torch.FloatTensor([]).to(device)
+
+            inference_start = time.time()
+
+            #progress_bar = tqdm(range(len(eval_dataloader)))
+            #for batch in eval_dataloader:
+
+            progress_bar = tqdm(range(len(eval_dataloader)))
+            for batch in eval_dataloader:
+
+                with torch.no_grad():
+
+                    #batch = {k: v.to(device) for k, v in batch.items()}
+                    labels = batch['labels'].to(device)
+
+                    new_batch = {'input_ids': batch['input_ids'].to(device), 'attention_mask': batch['attention_mask'].to(device), 
+                                 'roberta_ids': batch['roberta_input_ids'].to(device),
+                                 'roberta_mask': batch['roberta_attention_mask'].to(device)}
+
+                    outputs = model(**new_batch)
+
+                    logits = outputs
+                    predictions = torch.argmax(logits, dim=-1)
+                    metric.add_batch(predictions=predictions, references=labels)
+
+                    total_predictions = torch.cat((total_predictions, predictions), 0)
+                    total_references = torch.cat((total_references, labels), 0)
+
+                    progress_bar.update(1)
+
+
+
+            inference_end = time.time()
+            total_inference_time = inference_end - inference_start
+            inference_times.append(total_inference_time)
+
+            ############################################################
+
+            print("--------------------------")
+            print("Predictions Shapes")
+            print(total_predictions.shape)
+            print(total_references.shape)
+
+            results = metric.compute(references=total_predictions, predictions=total_references)
+            print("Accuracy for Test Set: " + str(results['accuracy']))
+
+            f_1_metric = load_metric("f1")
+            macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
+            print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
+            micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
+            print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']  * 100))
+
+            micro_averages.append(micro_f_1_results['f1'] * 100)
+            macro_averages.append(macro_f_1_results['f1'] * 100)
+
+
+        print("Processing " + dataset + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
+        print('micro_averages: ' + str(micro_averages))
+        print("Micro F1 Average: " + str(statistics.mean(micro_averages)))
+        if len(micro_averages) > 1:
+            print("Micro F1 Standard Variation: " + str(statistics.stdev(micro_averages)))
+
+        print('macro_averages: ' + str(macro_averages))
+        print("Macro F1 Average: " + str(statistics.mean(macro_averages)))
+        if len(macro_averages) > 1:
+            print("Macro F1 Standard Variation: " + str(statistics.stdev(macro_averages)))
+
+        print("Inference Time Average: " + str(statistics.mean(inference_times)))
+        print("Dataset Execution Run Time: " + str((time.time() - execution_start) / number_of_runs))
+        print("Epoch Average Time: " + str((time.time() - run_start) / total_epochs_performed))
+
+        print("GPU Memory available at the end")
+        print(get_gpu_memory())
+
+
+        ############################################################
+
+        current_learning_rate_results[dataset + "_micro_f1_average"] =  statistics.mean(micro_averages)
+        if len(micro_averages) > 1:
+            current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages)
+        current_learning_rate_results[dataset + "_macro_f1_average"] =  statistics.mean(macro_averages)
+        if len(macro_averages) > 1:
+            current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages)
+
+    ############################################################
+    
+    learning_rate_to_results_dict[str(chosen_learning_rate)] = current_learning_rate_results
+
+
+############################################################
+
+print("-----------------------------------------------------------------")
+print("Final Results: Best LR for each dataset")
+print("-----------------------------------------------------------------")
+
+dataset_to_best_lr_dict = {}
+
 for dataset in classification_datasets:
 
-    ###############################################################
-
-    execution_start = time.time()
-
-    print("GPU Memory available at the start")
-    print(get_gpu_memory())
-
-    print("Dataset: " + dataset)
-    print("Model: " + model_choice)
-    print("Dropout: " + str(current_dropout))
-    print("Frozen Choice: " + str(frozen_choice))
-    print("Number of Runs: " + str(number_of_runs))
-    print('Learning Rate: ' + str(chosen_learning_rate))
-    print("Checkpoint Path: " + checkpoint_path)
-    print("Number of Frozen Layers: " + str(frozen_layers))
-    print("Frozen Embeddings: " + str(frozen_embeddings))
-    print("Patience: " + str(patience_value))
-    print("Average Hidden Layers: " + str(average_hidden_state))
-    print("Validation Set Choice: " + str(validation_set_scoring))
-    print("Number of Epochs: " + str(num_epochs))
-    print("Loading Finetuned Embeddings: " + str(load_finetuned_roberta))
-
-    # Chemprot train, dev, and test
-    with open('text_classification/' + dataset + '/train.txt') as f:
-
-        train_set = f.readlines()
-        train_set = [ast.literal_eval(line) for line in train_set]
-        train_set_text = [line['text'] for line in train_set]
-        train_set_label = [line['label'] for line in train_set]
-
-    with open('text_classification/' + dataset + '/dev.txt') as f:
-        
-        dev_set = f.readlines()
-        dev_set = [ast.literal_eval(line) for line in dev_set]
-
-        dev_set_text = []
-        dev_set_label = []
-        for line in dev_set:
-
-            # Fix bug in MAG dev where there is a single label called "category"
-            if line['label'] != 'category':
-                dev_set_text.append(line['text'])
-                dev_set_label.append(line['label'])
-            else:
-                print("Found the error with category")
-
-
-    with open('text_classification/' + dataset + '/test.txt') as f:
-        
-        test_set = f.readlines()
-        test_set = [ast.literal_eval(line) for line in test_set]
-        test_set_text = [line['text'] for line in test_set]
-        test_set_label = [line['label'] for line in test_set]
-
-
-    ############################################################
-
-    labels_list = sorted(list(set(train_set_label)))
-    dev_label_list = sorted(list(set(dev_set_label)))
-    test_label_list = sorted(list(set(test_set_label)))
-
-    print("Label Lists")
-    print(labels_list)
-    print(dev_label_list)
-    print(test_label_list)
-
-    label_to_value_dict = {}
-
-    count = 0
-    for label in labels_list:
-      label_to_value_dict[label] = count
-      count += 1
-
-    train_set_label = [label_to_value_dict[label] for label in train_set_label]
-    dev_set_label = [label_to_value_dict[label] for label in dev_set_label]
-    test_set_label = [label_to_value_dict[label] for label in test_set_label]
-
-    print("Size of train, dev, and test sets")
-    print(len(train_set_label))
-    print(len(dev_set_label))
-    print(len(test_set_label))
-
-    ############################################################
-
-    # Load pretrained, finetuned RoBERTa-Large encoder
-
-    finetuned_roberta_model = AutoModel.from_pretrained('roberta-large', output_hidden_states=True)
-    roberta_tokenizer = AutoTokenizer.from_pretrained('roberta-large', model_max_length=512)
-
-    if load_finetuned_roberta == True:
-
-        #finetuned_roberta_path = "../../../net/nfs2.s2-research/jons/prefinetuned_RoBERTa/new_pretrained_roberta-large_sciie-relation-extraction_for_Scibert_mapping.pt"
-        #finetuned_roberta_path = "./prefinetuned_RoBERTa/new_pretrained_roberta-large_sciie-relation-extraction_for_Scibert_mapping.pt"
-        #finetuned_roberta_path = "./prefinetuned_RoBERTa/new_pretrained_roberta-large_chemprot_for_Scibert_mapping.pt"
-        finetuned_roberta_path = "./prefinetuned_RoBERTa/new_pretrained_roberta-large_sci-cite_for_Scibert_mapping.pt"
-
-        print("Loading embeddings from " + finetuned_roberta_path)
-
-        finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path), strict=True)
-
-    finetuned_roberta_model.to(device)
-
-    ############################################################
-
-    if validation_set_scoring == True:
-
-        training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
-        train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)
-        train.reset_index(drop=True, inplace=True)
-        validation.reset_index(drop=True, inplace=True)
-
-        training_dataset_pandas = train#[:1000]
-        training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
-        training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
-
-        validation_dataset_pandas = validation#[:1000]
-        validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
-        validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
-
-        test_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})
-        test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
-        test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
-
-    else:
-
-        training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
-        training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
-        training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
-
-        validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
-        validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
-        validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
-
-        test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
-        test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
-        test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
-
-
-    ############################################################
-
-
-    classification_dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 
-                                    'validation': validation_dataset_arrow, 
-                                    'test' : test_dataset_arrow})
-    
-    tokenized_datasets = classification_dataset.map(roberta_tokenize_function, batched=True)
-    tokenized_datasets = tokenized_datasets.map(tokenize_function, batched=True)
-
-    tokenized_datasets = tokenized_datasets.remove_columns(["text"])
-    tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
-    tokenized_datasets.set_format("torch")
-
-
-    ############################################################
-
-    micro_averages = []
-    macro_averages = []
-    inference_times = []
-
-    for i in range(0, number_of_runs):
-
-        run_start = time.time()
-
-        print("Loading Model")
-
-        train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
-        validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
-        eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
-
-        print("Number of labels: " + str(len(set(train_set_label))))
-
-        ############################################################
-
-        model = CustomBERTModel(len(set(train_set_label)), model_choice, current_dropout, 
-                                frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings)
-
-        model.to(device)
-
-        ############################################################
-
-
-        #optimizer = AdamW(model.parameters(), lr=5e-5)
-
-        criterion = nn.CrossEntropyLoss()
-        optimizer = Adam(model.parameters(), lr=chosen_learning_rate) #5e-6
-        #optimizer = Adam(model.parameters(), lr=1e-5) #5e-6
-
-        num_training_steps = num_epochs * len(train_dataloader)
-
-        lr_scheduler = get_scheduler(
-            name="linear", optimizer=optimizer, num_warmup_steps=100, num_training_steps=num_training_steps
-        )
-
-        ############################################################
-
-
-
-        # to track the training loss as the model trains
-        train_losses = []
-        # to track the validation loss as the model trains
-        valid_losses = []
-        # to track the average training loss per epoch as the model trains
-        avg_train_losses = []
-        # to track the average validation loss per epoch as the model trains
-        avg_valid_losses = []
-
-
-        # import EarlyStopping
-        from pytorchtools import EarlyStopping
-        # initialize the early_stopping object
-        early_stopping = EarlyStopping(patience=patience_value, verbose=True, path=checkpoint_path)
-        #early_stopping = EarlyStopping(patience=10, verbose=True)
-
-        print("Checkpoint Path: " + checkpoint_path)
-
-
-        print("Beginning Training")
-
-        total_epochs_performed = 0
-
-        for epoch in range(num_epochs):
-
-            total_epochs_performed += 1
-
-            print("Current Epoch: " + str(epoch))
-
-            progress_bar = tqdm(range(len(train_dataloader)))
-
-
-            model.train()
-            for batch in train_dataloader:
-
-                #with torch.no_grad():
-                
-                    #batch = {k: v.to(device) for k, v in batch.items()}
-                    labels = batch['labels'].to(device)
-
-                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
-                                 'roberta_ids': batch['roberta_input_ids'].to(device),
-                                 'roberta_mask': batch['roberta_attention_mask'].to(device)}
-                    outputs = model(**new_batch)
-
-                    loss = criterion(outputs, labels)
-
-                    loss.backward()
-                    optimizer.step()
-                    lr_scheduler.step()
-                    optimizer.zero_grad()
-                    progress_bar.update(1)
-
-                    train_losses.append(loss.item())
-
-
-            progress_bar = tqdm(range(len(validation_dataloader)))
-
-            model.eval()
-            for batch in validation_dataloader:
-
-                #with torch.no_grad():
-                
-                    #batch = {k: v.to(device) for k, v in batch.items()}
-                    labels = batch['labels'].to(device)
-
-                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
-                                 'roberta_ids': batch['roberta_input_ids'].to(device),
-                                 'roberta_mask': batch['roberta_attention_mask'].to(device)}
-                    outputs = model(**new_batch)
-
-                    loss = criterion(outputs, labels)
-                    progress_bar.update(1)
-
-                    valid_losses.append(loss.item())
-
-
-            # print training/validation statistics 
-            # calculate average loss over an epoch
-            train_loss = np.average(train_losses)
-            valid_loss = np.average(valid_losses)
-            avg_train_losses.append(train_loss)
-            avg_valid_losses.append(valid_loss)
-            
-            epoch_len = len(str(num_epochs))
-            
-            print_msg = (f'[{epoch:>{epoch_len}}/{num_epochs:>{epoch_len}}] ' +
-                         f'train_loss: {train_loss:.5f} ' +
-                         f'valid_loss: {valid_loss:.5f}')
-            
-            print(print_msg)
-            
-            # clear lists to track next epoch
-            train_losses = []
-            valid_losses = []
-            
-            # early_stopping needs the validation loss to check if it has decresed, 
-            # and if it has, it will make a checkpoint of the current model
-            early_stopping(valid_loss, model)
-            
-            if early_stopping.early_stop:
-                print("Early stopping")
-                break
-
-
-
-        ############################################################
-
-        print("Loading the Best Model")
-
-        model.load_state_dict(torch.load(checkpoint_path))
-
-
-
-        ############################################################
-
-        print("Beginning Evaluation")
-
-        metric = load_metric("accuracy")
-        #model.eval()
-
-        total_predictions = torch.FloatTensor([]).to(device)
-        total_references = torch.FloatTensor([]).to(device)
-
-        inference_start = time.time()
-
-        #progress_bar = tqdm(range(len(eval_dataloader)))
-        #for batch in eval_dataloader:
-
-        progress_bar = tqdm(range(len(eval_dataloader)))
-        for batch in eval_dataloader:
-
-            with torch.no_grad():
-
-                #batch = {k: v.to(device) for k, v in batch.items()}
-                labels = batch['labels'].to(device)
-
-                new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 
-                             'roberta_ids': batch['roberta_input_ids'].to(device),
-                             'roberta_mask': batch['roberta_attention_mask'].to(device)}
-
-                outputs = model(**new_batch)
-
-                logits = outputs
-                predictions = torch.argmax(logits, dim=-1)
-                metric.add_batch(predictions=predictions, references=labels)
-
-                total_predictions = torch.cat((total_predictions, predictions), 0)
-                total_references = torch.cat((total_references, labels), 0)
-
-                progress_bar.update(1)
-
-
-
-        inference_end = time.time()
-        total_inference_time = inference_end - inference_start
-        inference_times.append(total_inference_time)
-
-        ############################################################
-
-        print("--------------------------")
-        print("Predictions Shapes")
-        print(total_predictions.shape)
-        print(total_references.shape)
-
-        results = metric.compute(references=total_predictions, predictions=total_references)
-        print("Accuracy for Test Set: " + str(results['accuracy']))
-
-        f_1_metric = load_metric("f1")
-        macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
-        print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
-        micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
-        print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']  * 100))
-
-        micro_averages.append(micro_f_1_results['f1'] * 100)
-        macro_averages.append(macro_f_1_results['f1'] * 100)
-
-
-    print("Processing " + dataset + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
-    print('micro_averages: ' + str(micro_averages))
-    print("Micro F1 Average: " + str(statistics.mean(micro_averages)))
-    if len(micro_averages) > 1:
-        print("Micro F1 Standard Variation: " + str(statistics.stdev(micro_averages)))
-
-    print('macro_averages: ' + str(macro_averages))
-    print("Macro F1 Average: " + str(statistics.mean(macro_averages)))
-    if len(macro_averages) > 1:
-        print("Macro F1 Standard Variation: " + str(statistics.stdev(macro_averages)))
-
-    print("Inference Time Average: " + str(statistics.mean(inference_times)))
-    print("Dataset Execution Run Time: " + str((time.time() - execution_start) / number_of_runs))
-    print("Epoch Average Time: " + str((time.time() - run_start) / total_epochs_performed))
-
-    print("GPU Memory available at the end")
-    print(get_gpu_memory())
+    best_lr = learning_rate_choices[0]
+    best_combined_f1 = [0, 0]
+    best_combined_stds = [0, 0]
+
+    for chosen_learning_rate in learning_rate_choices:
+
+        current_combined_macro_micro_f1 = [learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_average"],
+                                           learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_average"]]
+
+        if sum(best_combined_f1) < sum(current_combined_macro_micro_f1):
+            best_lr = chosen_learning_rate
+            best_combined_f1 = current_combined_macro_micro_f1
+            best_combined_stds = [learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_std"],
+                                  learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_std"]]
+
+    dataset_to_best_lr_dict[dataset] = {
+                                            'best_lr': best_lr,
+                                            'best_combined_f1': best_combined_f1,
+                                            'best_combined_stds': best_combined_stds
+                                       }
+
+    print("--------------------------------------------")
+    print("Results for " + dataset)
+    print("Best LR: " + dataset_to_best_lr_dict[dataset]['best_lr'])
+    print("Best Micro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][0])
+    print("Best Macro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][1])
+    print("Micro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][0])
+    print("Macro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][1])
+    print("--------------------------------------------")
 
