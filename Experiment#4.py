@@ -150,8 +150,8 @@ current_dropout = True
 number_of_runs = 3 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
-frozen_embeddings = False
+frozen_layers = 12 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_embeddings = True
 average_hidden_state = False
 
 validation_set_scoring = True
@@ -159,21 +159,19 @@ validation_set_scoring = True
 random_state = 42
 
 #learning_rate_choices = [0.0001, 0.00001, 2e-5, 5e-5, 5e-6]
-learning_rate_choices = [2e-5, 5e-5, 5e-6]
+learning_rate_choices = [0.00001, 2e-5, 5e-5, 5e-6]
 
 ############################################################
 
 load_finetuned_roberta = True
-include_compact_embeddings = True
-normalize_embeddings = False
 
 #finetuned_model_choice = 'allenai/scibert_scivocab_uncased'
 #finetuned_embeddings_size = 768
 
 finetuned_model_choice = 'roberta-large'
 finetuned_embeddings_size = 1024
-data_set_of_finetune = 'chemprot'
-classification_datasets = ['sci-cite', 'sciie-relation-extraction'] #['chemprot', 'sci-cite', 'sciie-relation-extraction']
+data_set_of_finetune = 'sciie-relation-extraction'
+classification_datasets = ['chemprot', 'sci-cite'] #['chemprot', 'sci-cite', 'sciie-relation-extraction']
 
 ############################################################
 
@@ -187,7 +185,7 @@ classification_datasets = ['sci-cite', 'sciie-relation-extraction'] #['chemprot'
 #assigned_batch_size = 8
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-checkpoint_path = 'checkpoints/checkpoint_roberta_reuse_1313.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+checkpoint_path = 'checkpoints/checkpoint_roberta_reuse_1322.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 model_choice = 'roberta-large'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -242,8 +240,6 @@ for chosen_learning_rate in learning_rate_choices:
         print("Validation Set Choice: " + str(validation_set_scoring))
         print("Number of Epochs: " + str(num_epochs))
         print("Loading Finetuned Embeddings: " + str(load_finetuned_roberta))
-        print("Adding compact embeddings: " + str(include_compact_embeddings))
-        print("Normalize Embeddings: " + str(normalize_embeddings))
         print("Added Model Choice: " + str(finetuned_model_choice))
         print("data_set_of_finetune: " + str(data_set_of_finetune))
 

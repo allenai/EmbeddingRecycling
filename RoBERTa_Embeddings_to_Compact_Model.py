@@ -178,7 +178,7 @@ validation_set_scoring = True
 random_state = 42
 
 #learning_rate_choices = [0.0001, 0.00001, 2e-5, 5e-5, 5e-6]
-learning_rate_choices = [0.0001, 0.00001, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [0.00001, 2e-5, 5e-5, 5e-6]
 
 ############################################################
 
@@ -186,24 +186,24 @@ load_finetuned_roberta = False
 include_compact_embeddings = True
 normalize_embeddings = False
 
-finetuned_model_choice = 'allenai/scibert_scivocab_uncased'
-finetuned_embeddings_size = 768
+#finetuned_model_choice = 'allenai/scibert_scivocab_uncased'
+#finetuned_embeddings_size = 768
 
-#finetuned_model_choice = 'roberta-large'
-#finetuned_embeddings_size = 1024
-roberta_divisor = 100 #100, 50, 25, 10, 5, 1
+finetuned_model_choice = 'roberta-large'
+finetuned_embeddings_size = 1024
+roberta_divisor = 10 #100, 50, 25, 10, 5, 1
 
 ############################################################
 
-#checkpoint_path = 'checkpoints/checkpoint_scibert_mapping_1338.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#assigned_batch_size = 8
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-checkpoint_path = 'checkpoints/checkpoint_minilm_768_131_mapping.pt'
-model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+checkpoint_path = 'checkpoints/checkpoint_scibert_mapping_1338.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+model_choice = 'allenai/scibert_scivocab_uncased'
 assigned_batch_size = 8
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+#checkpoint_path = 'checkpoints/checkpoint_minilm_768_171_mapping.pt'
+#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+#assigned_batch_size = 8
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 
 ############################################################
@@ -334,6 +334,7 @@ for chosen_learning_rate in learning_rate_choices:
             finetuned_roberta_model.load_state_dict(torch.load(finetuned_roberta_path), strict=True)
 
         finetuned_roberta_model.to(device)
+        finetuned_roberta_model.eval()
 
         ############################################################
 
@@ -677,10 +678,10 @@ for dataset in classification_datasets:
 
     print("--------------------------------------------")
     print("Results for " + dataset)
-    print("Best LR: " + dataset_to_best_lr_dict[dataset]['best_lr'])
-    print("Best Micro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][0])
-    print("Best Macro F1: " + dataset_to_best_lr_dict[dataset]['best_combined_f1'][1])
-    print("Micro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][0])
-    print("Macro StD: " + dataset_to_best_lr_dict[dataset]['best_combined_stds'][1])
+    print("Best LR: " + str(dataset_to_best_lr_dict[dataset]['best_lr']))
+    print("Best Micro F1: " + str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][0]))
+    print("Best Macro F1: " + str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][1]))
+    print("Micro StD: " + str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0]))
+    print("Macro StD: " + str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1]))
     print("--------------------------------------------")
 

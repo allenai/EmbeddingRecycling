@@ -32,6 +32,7 @@ import os
 from sklearn.model_selection import train_test_split
 
 from tokenizers import PreTokenizedInputSequence
+import json
 
 ############################################################
 
@@ -119,8 +120,6 @@ device = "cuda:0"
 device = torch.device(device)
 
 classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
-#classification_datasets = ['NCBI-disease']
-#classification_datasets = ['JNLPBA', 'NCBI-disease']
 
 num_epochs = 50 #1000 #10
 patience_value = 5 #10 #3
@@ -135,42 +134,50 @@ validation_set_scoring = True
 
 random_state = 42
 
-learning_rate_choices = [0.0001, 0.00001, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
  
-#checkpoint_path = 'checkpoint_roberta_ner_704.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
 #model_choice = 'roberta-large'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
-#checkpoint_path = 'checkpoint_scibert_ner_2111.pt' # 41, 42, 43, 44, 45, 46, 47, 48, 49
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #assigned_batch_size = 32 #16
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True, model_max_length=512)
 
-#checkpoint_path = 'checkpoint_minilm_768_ner_115.pt'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
 
-#checkpoint_path = 'checkpoint_minilm_384_ner_107.pt'
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
 
-#checkpoint_path = 'checkpoint_distilbert_ner_115.pt'
-#model_choice = "distilbert-base-uncased"
-#assigned_batch_size = 16
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+model_choice = "distilbert-base-uncased"
+assigned_batch_size = 16
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint_deberta_small_ner_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 #model_choice = 'microsoft/deberta-v3-small'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#checkpoint_path = 'checkpoint_deberta_xsmall_ner_37.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
 #model_choice = 'microsoft/deberta-v3-xsmall'
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+############################################################
+
+dataset_folder_path = "checkpoints/ner/" + model_choice.replace("/", "-")
+if not os.path.isdir(dataset_folder_path):
+
+    print("Creating folder: " + dataset_folder_path)
+    os.mkdir(dataset_folder_path)
+
+for dataset in classification_datasets:
+    try:
+        os.mkdir(dataset_folder_path + "/" + dataset)
+    except:
+        print("Already exists")
+        print(dataset_folder_path + "/" + dataset)
 
 ############################################################
 
@@ -185,19 +192,6 @@ for chosen_learning_rate in learning_rate_choices:
     current_learning_rate_results = {}
 
     for dataset in classification_datasets:
-
-        if not os.path.isdir('checkpoints/ner'):
-            os.mkdir('checkpoints/ner')
-
-        dataset_folder_path = "checkpoints/ner/" + model_choice.replace("/", "-")
-
-        if not os.path.isdir(dataset_folder_path):
-
-            print("Creating folder: " + dataset_folder_path)
-            os.mkdir(dataset_folder_path)
-
-            for dataset in classification_datasets:
-                os.mkdir(dataset_folder_path + "/" + dataset)
 
         checkpoint_path = "checkpoints/ner/" + model_choice.replace("/", "-") + "/" + dataset + "/" + str(chosen_learning_rate) + "_"
         checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
@@ -799,13 +793,13 @@ print("-----------------------------------------------------------------")
 print("Micro and Macro F1 Scores")
 for dataset in classification_datasets:
 
-    print(str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][0])) 
-    print(str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][1])) 
+    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_f1'][0], 2))) 
+    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_f1'][1], 2))) 
 
 print("-----------------------------------------------------------------")
 print("Micro and Macro StDs")
 for dataset in classification_datasets:
 
-    print(str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0])) 
-    print(str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1])) 
+    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0], 2))) 
+    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1], 2))) 
 
