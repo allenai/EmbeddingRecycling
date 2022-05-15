@@ -370,8 +370,12 @@ learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
 
 ########################################################################################
 
-added_model_choice = 'allenai/scibert_scivocab_uncased'
-finetuned_embeddings_size = 768
+#added_model_choice = 'allenai/scibert_scivocab_uncased'
+#finetuned_embeddings_size = 768
+#embeddings_divisor = 10
+
+added_model_choice = 'roberta-large'
+finetuned_embeddings_size = 1024
 embeddings_divisor = 10
 
 added_model_tokenizer = AutoTokenizer.from_pretrained(added_model_choice, 
@@ -382,52 +386,10 @@ added_model.to(device)
 
 ########################################################################################
  
-#model_choice = 'roberta-large'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
-
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#assigned_batch_size = 32 #16
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True, model_max_length=512)
-
+checkpoint_path = "checkpoints/experiment4_ner_104.pt"
 model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 assigned_batch_size = 32
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
-
-#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
-
-#model_choice = "distilbert-base-uncased"
-#assigned_batch_size = 16
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'microsoft/deberta-v3-small'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'microsoft/deberta-v3-xsmall'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-############################################################
-
-ner_checkpoints_path = "checkpoints/ner/"
-if not os.path.isdir(ner_checkpoints_path):
-    os.mkdir(ner_checkpoints_path)
-
-dataset_folder_path = "checkpoints/ner/" + model_choice.replace("/", "-")
-if not os.path.isdir(dataset_folder_path):
-
-    print("Creating folder: " + dataset_folder_path)
-    os.mkdir(dataset_folder_path)
-
-for dataset in classification_datasets:
-    try:
-        os.mkdir(dataset_folder_path + "/" + dataset)
-    except:
-        print("Already exists")
-        print(dataset_folder_path + "/" + dataset)
 
 ############################################################
 
@@ -442,12 +404,6 @@ for chosen_learning_rate in learning_rate_choices:
     current_learning_rate_results = {}
 
     for dataset in classification_datasets:
-
-        checkpoint_path = "checkpoints/ner/" + model_choice.replace("/", "-") + "/" + dataset + "/" + str(chosen_learning_rate) + "_"
-        checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
-        checkpoint_path += str(validation_set_scoring) + ".pt"
-
-        ##################################################
 
         print("GPU Memory available at the start")
         print(get_gpu_memory())
@@ -466,6 +422,8 @@ for chosen_learning_rate in learning_rate_choices:
         print("Patience: " + str(patience_value))
         print("Average Hidden Layers: " + str(average_hidden_state))
         print("Validation Set Choice: " + str(validation_set_scoring))
+        print("Added Model Choice: " + added_model_choice)
+        print("Embeddings Divisor: " + str(embeddings_divisor))
         print("Number of Epochs: " + str(num_epochs))
 
         # Gather train, dev, and test sets
@@ -572,24 +530,6 @@ for chosen_learning_rate in learning_rate_choices:
         tokenized_datasets.set_format("torch")
 
 
-        #print("tokenized_datasets")
-        #print(tokenized_datasets['train'].features)
-        #print(type(tokenized_datasets['train']['input_ids']))
-        #print(len(tokenized_datasets['train']['input_ids']))
-        #print(len(tokenized_datasets['train']['labels']))
-
-        #print("----------------------------------")
-        #for index in range(0, 3):
-            #print(tokenized_datasets['train']['tokens'][index])
-            #print(tokenized_datasets['train']['input_ids'][index])
-            #print(tokenized_datasets['train']['labels'][index])
-            #print(tokenized_datasets['train']['attention_mask'][index])
-            #print(len(tokenized_datasets['train']['input_ids'][index]))
-            #print(len(tokenized_datasets['train']['labels'][index]))
-            #print(tokenized_datasets['train']['attention_mask'][index])
-            #print("----------------------------------")
-
-
         ############################################################
 
         micro_averages = []
@@ -664,9 +604,6 @@ for chosen_learning_rate in learning_rate_choices:
             model.to(device)
 
             ############################################################
-
-
-            #optimizer = AdamW(model.parameters(), lr=5e-5)
 
             criterion = nn.CrossEntropyLoss()
             optimizer = Adam(model.parameters(), lr=chosen_learning_rate) #5e-6
@@ -823,13 +760,6 @@ for chosen_learning_rate in learning_rate_choices:
                     predictions = torch.argmax(logits, dim=-1)
                     labels = batch['labels'].to(device)
 
-                    #print("actual labels")
-                    #print(labels.shape)
-                    #print(torch.flatten(labels).shape)
-                    #print("logits shape")
-                    #print(predictions.shape)
-                    #print(torch.flatten(predictions).shape)
-
                     total_predictions = torch.cat((total_predictions, torch.flatten(predictions)), 0)
                     total_references = torch.cat((total_references, torch.flatten(labels)), 0)
 
@@ -840,17 +770,6 @@ for chosen_learning_rate in learning_rate_choices:
             inference_end = time.time()
             total_inference_time = inference_end - inference_start
             inference_times.append(total_inference_time)
-
-            ############################################################
-
-            #print("--------------------------")
-            #print("Predictions Shapes")
-            #print(type(total_predictions))
-            #print(type(total_references))
-            #print(total_predictions.shape)
-            #print(total_references.shape)
-            #print(total_predictions[:30])
-            #print(total_references[:30])
 
             ############################################################
 
@@ -868,16 +787,7 @@ for chosen_learning_rate in learning_rate_choices:
             new_total_references = torch.FloatTensor(new_total_references)
 
             ############################################################
-
-            #print("--------------------------")
-            #print("Predictions Shapes after filtering out -100s")
-            #print(type(new_total_predictions))
-            #print(type(new_total_references))
-            #print(new_total_predictions.shape)
-            #print(new_total_references.shape)
-            #print(new_total_predictions[:30])
-            #print(new_total_references[:30])
-
+            
             f_1_metric = load_metric("f1")
             macro_f_1_results = f_1_metric.compute(average='macro', references=new_total_predictions, predictions=new_total_references)
             print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
