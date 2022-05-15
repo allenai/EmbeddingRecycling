@@ -1,9 +1,11 @@
 
 
 import torch.nn as nn
-from transformers import T5Tokenizer, T5EncoderModel
-from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
-#import tensorflow as tf
+from transformers import T5Tokenizer, T5EncoderModel, RobertaForSequenceClassification
+from transformers import BertModel, AutoTokenizer, AutoModel
+from transformers import RobertaTokenizer, RobertaForTokenClassification, AutoModelForTokenClassification
+import tensorflow as tf
+
 
 import pandas as pd
 import numpy as np
@@ -28,6 +30,8 @@ import subprocess as sp
 import os
 
 from sklearn.model_selection import train_test_split
+
+from tokenizers import PreTokenizedInputSequence
 import json
 
 ############################################################
@@ -38,205 +42,119 @@ def get_gpu_memory():
     memory_free_values = [int(x.split()[0]) for i, x in enumerate(memory_free_info)]
     return memory_free_values
 
+def process_NER_dataset(dataset_path):
+
+    total_words = []
+    total_labels = []
+
+    current_words = []
+    current_labels = []
+
+    with open(dataset_path) as f:
+
+        train_set = f.readlines()
+
+        for line in tqdm(train_set):
+
+            line_split = line.split("\t")
+
+            if len(line_split) <= 2 and len(current_words) != 0:
+
+                if len(current_words) != len(current_labels):
+                    print("Error")
+
+                #if len(current_words) >= 512:
+                #    print("Length error! Sequence truncated")
+                #    current_words = current_words[:512]
+                #    current_labels = current_labels[:512]
+
+                total_words.append(current_words)
+                total_labels.append(current_labels)
+
+                current_words = []
+                current_labels = []
+
+            elif len(line_split) > 2:
+
+                current_words.append(line_split[0])
+                current_labels.append(line_split[3].replace("\n", ""))
+
+    return total_words, total_labels
+
 ############################################################
 
-class CustomBERTModel(nn.Module):
-    def __init__(self, number_of_labels, model_choice, dropout_layer, frozen, 
-                 frozen_layer_count, average_hidden_state, frozen_embeddings):
+def tokenize_and_align_labels(examples):
+    tokenized_inputs = tokenizer(examples["tokens"], padding=True, truncation=True, is_split_into_words=True)
 
-          super(CustomBERTModel, self).__init__()
-          #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
-          if model_choice == "t5-3b":
-
-            model_encoding = T5EncoderModel.from_pretrained(model_choice)
-            embedding_size = 1024
-            self.encoderModel = model_encoding
-
-          elif model_choice == "roberta-large" or model_choice == "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune":
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 1024
-            self.encoderModel = model_encoding
-
-          elif model_choice == "nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large" or model_choice == "microsoft/deberta-v3-xsmall":
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 384
-            self.encoderModel = model_encoding
-
-          elif model_choice == "t5-small":
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 512
-            self.encoderModel = model_encoding
-
-          else:
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 768
-            self.encoderModel = model_encoding
-
-
-
-          if frozen == True:
-            print("Freezing the model parameters")
-            for param in self.encoderModel.parameters():
-                param.requires_grad = False
-
-
-
-          if frozen_layer_count > 0:
-
-            if model_choice == "t5-3b":
-
-                print("Freezing T5-3b")
-                print("Number of Layers: " + str(len(self.encoderModel.encoder.block)))
-
-                for parameter in self.encoderModel.parameters():
-                    parameter.requires_grad = False
-
-                for i, m in enumerate(self.encoderModel.encoder.block):        
-                    #Only un-freeze the last n transformer blocks
-                    if i+1 > 24 - frozen_layer_count:
-                        print(str(i) + " Layer")
-                        for parameter in m.parameters():
-                            parameter.requires_grad = True
-
-            elif model_choice == "distilbert-base-uncased":
-
-                #print(self.encoderModel.__dict__)
-                print("Number of Layers: " + str(len(list(self.encoderModel.transformer.layer))))
-
-                layers_to_freeze = self.encoderModel.transformer.layer[:frozen_layer_count]
-                for module in layers_to_freeze:
-                    for param in module.parameters():
-                        param.requires_grad = False
-
+    labels = []
+    for i, label in enumerate(examples[f"ner_tags"]):
+        word_ids = tokenized_inputs.word_ids(batch_index=i)  # Map tokens to their respective word.
+        previous_word_idx = None
+        label_ids = []
+        for word_idx in word_ids:  # Set the special tokens to -100.
+            if word_idx is None:
+                label_ids.append(-100)
+            elif word_idx != previous_word_idx:  # Only label the first token of a given word.
+                label_ids.append(label[word_idx])
             else:
+                label_ids.append(-100)
+            previous_word_idx = word_idx
+        labels.append(label_ids)
 
-                print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
+    if len(labels) != len(examples["tokens"]):
+        print("Labels length unequal to tokenized inputs length")
 
-                layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
-                for module in layers_to_freeze:
-                    for param in module.parameters():
-                        param.requires_grad = False
+    tokenized_inputs["labels"] = labels
 
+    #print("tokenized_inputs keys")
+    #print(tokenized_inputs.keys())
 
+    ################################################
 
-          
-          if frozen_embeddings == True:
-            print("Frozen Embeddings Layer")
-            for param in self.encoderModel.embeddings.parameters():
-                param.requires_grad = False
-
-
-
-
-
-          ### New layers:
-          self.linear1 = nn.Linear(embedding_size, 256)
-          self.linear2 = nn.Linear(256, number_of_labels)
-
-          self.embedding_size = embedding_size
-          self.average_hidden_state = average_hidden_state
-
-
-          
-
-    def forward(self, ids, mask):
-          
-          if model_choice == "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune":
-
-              total_output = self.encoderModel(
-                   input_ids=ids,
-                   decoder_input_ids=ids, 
-                   attention_mask=mask)
-
-          elif model_choice == "t5-small":
-
-              total_output = self.encoderModel(
-                   input_ids=ids,
-                   decoder_input_ids=ids, 
-                   attention_mask=mask)
-
-          else:
-
-              total_output = self.encoderModel(
-                   ids, 
-                   attention_mask=mask)
-
-          sequence_output = total_output['last_hidden_state']
-
-          if self.average_hidden_state == True:
-
-            sequence_output = torch.mean(sequence_output, dim=1)
-            linear1_output = self.linear1(sequence_output)
-
-          else:
-
-            linear1_output = self.linear1(sequence_output[:,0,:].view(-1, self.embedding_size))
-
-
-          linear2_output = self.linear2(linear1_output)
-
-          return linear2_output
-
-
+    return tokenized_inputs
 
 ############################################################
+
 
 device = "cuda:0"
 device = torch.device(device)
 
-#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
 
 num_epochs = 100 #1000 #10
 patience_value = 10 #10 #3
 current_dropout = True
 number_of_runs = 10 #1 #5
 frozen_choice = False
-#chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
-frozen_embeddings = False
+#chosen_learning_rate =  0.0001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 average_hidden_state = False
-
 validation_set_scoring = False
 random_state = 42
 
-learning_rate_for_each_dataset = [1e-5, 5e-6, 2e-5]
-
 ############################################################
 
-model_choice = 'roberta-large'
-assigned_batch_size = 16
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_embeddings = False
 
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+learning_rate_for_each_dataset = [5e-5, 5e-6, 5e-5]
 
-#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
+############################################################
+ 
 #model_choice = "distilbert-base-uncased"
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
+model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+assigned_batch_size = 32
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
+
+#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
+
 ############################################################
 
-def tokenize_function(examples):
-
-    return tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
-
-############################################################
-
-best_checkpoints_folder = "best_checkpoints/"
+best_checkpoints_folder = "best_checkpoints/ner/"
 if not os.path.isdir(best_checkpoints_folder):
 
     print("Creating folder: " + best_checkpoints_folder)
@@ -257,8 +175,11 @@ for dataset in classification_datasets:
 
 ############################################################
 
-dataset_folder_path = "checkpoints/" + model_choice.replace("/", "-") + "/"
+ner_checkpoints_path = "checkpoints/ner/"
+if not os.path.isdir(ner_checkpoints_path):
+    os.mkdir(ner_checkpoints_path)
 
+dataset_folder_path = "checkpoints/ner/" + model_choice.replace("/", "-")
 if not os.path.isdir(dataset_folder_path):
 
     print("Creating folder: " + dataset_folder_path)
@@ -266,11 +187,10 @@ if not os.path.isdir(dataset_folder_path):
 
 for dataset in classification_datasets:
     try:
-        print("Making: " + dataset_folder_path + dataset)
-        os.mkdir(dataset_folder_path + dataset)
+        os.mkdir(dataset_folder_path + "/" + dataset)
     except:
         print("Already exists")
-        print(dataset_folder_path + dataset)
+        print(dataset_folder_path + "/" + dataset)
 
 ############################################################
 
@@ -278,7 +198,7 @@ learning_rate_to_results_dict = {}
 
 for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classification_datasets):
 
-        best_model_save_path = "best_checkpoints/" + model_choice.replace("/","-") + "/"
+        best_model_save_path = "best_checkpoints/ner/" + model_choice.replace("/","-") + "/"
         best_model_save_path += "Dataset_" + dataset + "_"
         best_model_save_path += "chosen_learning_rate_" + str(chosen_learning_rate) + "_"
         best_model_save_path += "frozen_layers_" + str(frozen_layers) + "_"
@@ -290,15 +210,16 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
 
         ############################################################
 
-
         print("--------------------------------------------------------------------------")
         print("Starting new learning rate: " + str(chosen_learning_rate))
         print("For dataset: " + dataset)
         print("--------------------------------------------------------------------------")
 
-        checkpoint_path = "checkpoints/" + model_choice.replace("/", "-") + "/" + dataset + "/" + str(chosen_learning_rate) + "_"
+        checkpoint_path = "checkpoints/ner/" + model_choice.replace("/", "-") + "/" + dataset + "/" + str(chosen_learning_rate) + "_"
         checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
         checkpoint_path += str(validation_set_scoring) + ".pt"
+
+        ##################################################
 
         print("GPU Memory available at the start")
         print(get_gpu_memory())
@@ -319,41 +240,27 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
         print("Validation Set Choice: " + str(validation_set_scoring))
         print("Number of Epochs: " + str(num_epochs))
 
-        # Chemprot train, dev, and test
-        with open('text_classification/' + dataset + '/train.txt') as f:
+        # Gather train, dev, and test sets
+        train_set_text, train_set_label = process_NER_dataset('ner/' + dataset + '/train.txt')
 
-            train_set = f.readlines()
-            train_set = [ast.literal_eval(line) for line in train_set]
-            train_set_text = [line['text'] for line in train_set]
-            train_set_label = [line['label'] for line in train_set]
+        dev_set_text, dev_set_label = process_NER_dataset('ner/' + dataset + '/dev.txt')
 
-        with open('text_classification/' + dataset + '/dev.txt') as f:
-            
-            dev_set = f.readlines()
-            dev_set = [ast.literal_eval(line) for line in dev_set]
-
-            dev_set_text = []
-            dev_set_label = []
-            for line in dev_set:
-
-                # Fix bug in MAG dev where there is a single label called "category"
-                if line['label'] != 'category':
-                    dev_set_text.append(line['text'])
-                    dev_set_label.append(line['label'])
-                else:
-                    print("Found the error with category")
-
-        with open('text_classification/' + dataset + '/test.txt') as f:
-            
-            test_set = f.readlines()
-            test_set = [ast.literal_eval(line) for line in test_set]
-            test_set_text = [line['text'] for line in test_set]
-            test_set_label = [line['label'] for line in test_set]
+        test_set_text, test_set_label = process_NER_dataset('ner/' + dataset + '/test.txt')
 
 
-        ############################################################
+        ####################################################################################
 
-        labels_list = sorted(list(set(train_set_label)))
+        consolidated_labels = [label for label_list in train_set_label for label in label_list]
+
+        labels_list = sorted(list(set(consolidated_labels)))
+
+        print("Before reordering label list")
+        print(labels_list)
+
+        labels_list.insert(0, labels_list.pop(labels_list.index('O')))
+
+        print("After reordering label list")
+        print(labels_list)
 
         label_to_value_dict = {}
 
@@ -362,15 +269,35 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
           label_to_value_dict[label] = count
           count += 1
 
-        train_set_label = [label_to_value_dict[label] for label in train_set_label]
-        dev_set_label = [label_to_value_dict[label] for label in dev_set_label]
-        test_set_label = [label_to_value_dict[label] for label in test_set_label]
+        number_of_labels = len(list(label_to_value_dict.keys()))
 
-        ############################################################
+        print("Number of labels: " + str(number_of_labels))
+
+        ####################################################################################
+
+        def convert_Label_to_Label_ID(label_list):
+
+          new_list = []
+          for label in label_list:
+              new_list.append(label_to_value_dict[label])
+          return new_list
+
+        ####################################################################################
+
+        train_set_label = [convert_Label_to_Label_ID(label_list) for label_list in train_set_label]
+        dev_set_label = [convert_Label_to_Label_ID(label_list) for label_list in dev_set_label]
+        test_set_label = [convert_Label_to_Label_ID(label_list) for label_list in test_set_label]
+
+        print("Size of train, dev, and test")
+        print(len(train_set_label))
+        print(len(dev_set_label))
+        print(len(test_set_label))
+
+        ####################################################################################
 
         if validation_set_scoring == True:
 
-            training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
+            training_df = pd.DataFrame({'ner_tags': train_set_label, 'tokens': train_set_text})
             train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)
             train.reset_index(drop=True, inplace=True)
             validation.reset_index(drop=True, inplace=True)
@@ -383,36 +310,37 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
             validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
             validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 
-            test_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})
+            test_dataset_pandas = pd.DataFrame({'ner_tags': dev_set_label, 'tokens': dev_set_text})
             test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
             test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
 
         else:
 
-            training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
+            training_dataset_pandas = pd.DataFrame({'ner_tags': train_set_label, 'tokens': train_set_text})#[:1000]
             training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
             training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
 
-            validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
+            validation_dataset_pandas = pd.DataFrame({'ner_tags': dev_set_label, 'tokens': dev_set_text})#[:1000]
             validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
             validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 
-            test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
+            test_dataset_pandas = pd.DataFrame({'ner_tags': test_set_label, 'tokens': test_set_text})
             test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
             test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
 
 
         ############################################################
 
-
         classification_dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 
                                         'validation': validation_dataset_arrow, 
                                         'test' : test_dataset_arrow})
-        tokenized_datasets = classification_dataset.map(tokenize_function, batched=True)
+
+        tokenized_datasets = classification_dataset.map(tokenize_and_align_labels, batched=True, batch_size=assigned_batch_size)
 
 
-        tokenized_datasets = tokenized_datasets.remove_columns(["text"])
-        tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
+        #tokenized_datasets = tokenized_datasets.remove_columns(["tokens"])
+        tokenized_datasets = tokenized_datasets.remove_columns(["tokens", "ner_tags"])
+        #tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
         tokenized_datasets.set_format("torch")
 
 
@@ -430,23 +358,67 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
             validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
             eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
 
-            print("Number of labels: " + str(len(set(train_set_label))))
 
             ############################################################
 
-            model = CustomBERTModel(len(set(train_set_label)), model_choice, current_dropout, 
-                                    frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings)
+            model = AutoModelForTokenClassification.from_pretrained(model_choice, num_labels=number_of_labels, output_hidden_states=True)
+            #model = RobertaForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
+
+            if frozen_layers > 0:
+
+                if model_choice == "distilbert-base-uncased":
+
+                    #print(model.__dict__)
+                    print("Number of Layers: " + str(len(list(model.distilbert.transformer.layer))))
+                    print("Number of Layers to Freeze: " + str(frozen_layers))
+
+                    layers_to_freeze = model.distilbert.transformer.layer[:frozen_layers]
+                    for module in layers_to_freeze:
+                        for param in module.parameters():
+                            param.requires_grad = False
+
+                elif model_choice == 'allenai/scibert_scivocab_uncased':
+
+                    #print(model.__dict__)
+                    print("Number of Layers: " + str(len(list(model.bert.encoder.layer))))
+                    print("Number of Layers to Freeze: " + str(frozen_layers))
+
+                    layers_to_freeze = model.bert.encoder.layer[:frozen_layers]
+                    for module in layers_to_freeze:
+                        for param in module.parameters():
+                            param.requires_grad = False
+
+                else:
+
+                    #print(model.__dict__)
+                    print("Number of Layers: " + str(len(list(model.roberta.encoder.layer))))
+                    print("Number of Layers to Freeze: " + str(frozen_layers))
+
+                    layers_to_freeze = model.roberta.encoder.layer[:frozen_layers]
+                    for module in layers_to_freeze:
+                        for param in module.parameters():
+                            param.requires_grad = False
+
+            if frozen_embeddings == True:
+                print("Frozen Embeddings Layer")
+                if model_choice == "distilbert-base-uncased":
+                    for param in model.distilbert.embeddings.parameters():
+                        param.requires_grad = False
+                elif model_choice == 'allenai/scibert_scivocab_uncased':
+                    for param in model.bert.embeddings.parameters():
+                        param.requires_grad = False
+                else:
+                    for param in model.roberta.embeddings.parameters():
+                        param.requires_grad = False
+
 
             model.to(device)
 
             ############################################################
 
 
-            #optimizer = AdamW(model.parameters(), lr=5e-5)
-
             criterion = nn.CrossEntropyLoss()
             optimizer = Adam(model.parameters(), lr=chosen_learning_rate) #5e-6
-            #optimizer = Adam(model.parameters(), lr=1e-5) #5e-6
 
             num_training_steps = num_epochs * len(train_dataloader)
 
@@ -489,27 +461,23 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
 
                 progress_bar = tqdm(range(len(train_dataloader)))
 
-
                 model.train()
                 for batch in train_dataloader:
 
-                    #with torch.no_grad():
-                    
-                        batch = {k: v.to(device) for k, v in batch.items()}
-                        labels = batch['labels']
+                    new_batch = {'input_ids': batch['input_ids'].to(device),
+                                 'attention_mask': batch['attention_mask'].to(device)}
+                    labels = batch['labels'].to(device)
 
-                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-                        outputs = model(**new_batch)
+                    outputs = model(**new_batch, labels=labels)
 
-                        loss = criterion(outputs, labels)
+                    loss = outputs.loss
+                    loss.backward()
 
-                        loss.backward()
-                        optimizer.step()
-                        lr_scheduler.step()
-                        optimizer.zero_grad()
-                        progress_bar.update(1)
-
-                        train_losses.append(loss.item())
+                    optimizer.step()
+                    lr_scheduler.step()
+                    optimizer.zero_grad()
+                    progress_bar.update(1)
+                    train_losses.append(loss.item())
 
 
                 progress_bar = tqdm(range(len(validation_dataloader)))
@@ -517,18 +485,20 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
                 model.eval()
                 for batch in validation_dataloader:
 
-                    #with torch.no_grad():
-                    
-                        batch = {k: v.to(device) for k, v in batch.items()}
-                        labels = batch['labels']
+                        new_batch = {'input_ids': batch['input_ids'].to(device),
+                                     'attention_mask': batch['attention_mask'].to(device)}
+                        labels = batch['labels'].to(device)
 
-                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-                        outputs = model(**new_batch)
+                        outputs = model(**new_batch, labels=labels)
 
-                        loss = criterion(outputs, labels)
+                        loss = outputs.loss
+                        loss.backward()
+
                         progress_bar.update(1)
-
+                        train_losses.append(loss.item())
                         valid_losses.append(loss.item())
+
+
 
 
                 # print training/validation statistics 
@@ -564,11 +534,6 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
 
 
 
-
-
-
-
-
         ############################################################
 
         print("Loading the Best Model")
@@ -589,29 +554,39 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
 
             with torch.no_grad():
 
-                batch = {k: v.to(device) for k, v in batch.items()}
-                labels = batch['labels']
+                new_batch = {'input_ids': batch['input_ids'].to(device),
+                             'attention_mask': batch['attention_mask'].to(device)}
+                labels = batch['labels'].to(device)
 
-                new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+                outputs = model(**new_batch, labels=labels)
 
-                outputs = model(**new_batch)
+                logits = outputs.logits
 
-                logits = outputs
                 predictions = torch.argmax(logits, dim=-1)
-                metric.add_batch(predictions=predictions, references=labels)
 
-                total_predictions = torch.cat((total_predictions, predictions), 0)
-                total_references = torch.cat((total_references, labels), 0)
+                total_predictions = torch.cat((total_predictions, torch.flatten(predictions)), 0)
+                total_references = torch.cat((total_references, torch.flatten(labels)), 0)
 
                 progress_bar.update(1)
 
 
+
         ############################################################
 
-        print("--------------------------")
-        print("Predictions Shapes")
-        print(total_predictions.shape)
-        print(total_references.shape)
+        # Remove all the -100 references and predictions for calculating macro f-1 scores
+
+        new_total_predictions = []
+        new_total_references = []
+
+        for j in tqdm(range(0, len(total_predictions))):
+            if total_references[j] != -100:
+                new_total_predictions.append(total_predictions[j])
+                new_total_references.append(total_references[j])
+
+        new_total_predictions = torch.FloatTensor(new_total_predictions)
+        new_total_references = torch.FloatTensor(new_total_references)
+
+        ############################################################
 
         print("-----------------------------------------------------------------")
         print("Final Results for Spreadsheet")
@@ -626,14 +601,11 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
         print("Validation Set Choice: " + str(validation_set_scoring))
         print("-----------------------------------------------------------------")
 
-        results = metric.compute(references=total_predictions, predictions=total_references)
-        print("Accuracy for Test Set: " + str(results['accuracy']))
-
         f_1_metric = load_metric("f1")
-        macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
+        micro_f_1_results = f_1_metric.compute(average='micro', references=new_total_predictions, predictions=new_total_references)
+        print("Micro F1 for Test Set: " + str(micro_f_1_results['f1'] * 100))
+        macro_f_1_results = f_1_metric.compute(average='macro', references=new_total_predictions, predictions=new_total_references)
         print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
-        micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
-        print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']  * 100))
 
         print("GPU Memory available at the end")
         print(get_gpu_memory())

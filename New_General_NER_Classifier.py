@@ -1,11 +1,9 @@
 
 
 import torch.nn as nn
-from transformers import T5Tokenizer, T5EncoderModel, RobertaForSequenceClassification
-from transformers import BertModel, AutoTokenizer, AutoModel
-from transformers import RobertaTokenizer, RobertaForTokenClassification, AutoModelForTokenClassification
-import tensorflow as tf
-
+from transformers import T5Tokenizer, T5EncoderModel
+from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer, AutoModelForTokenClassification
+#import tensorflow as tf
 
 import pandas as pd
 import numpy as np
@@ -30,8 +28,6 @@ import subprocess as sp
 import os
 
 from sklearn.model_selection import train_test_split
-
-from tokenizers import PreTokenizedInputSequence
 import json
 
 ############################################################
@@ -41,6 +37,145 @@ def get_gpu_memory():
     memory_free_info = sp.check_output(command.split()).decode('ascii').split('\n')[:-1][1:]
     memory_free_values = [int(x.split()[0]) for i, x in enumerate(memory_free_info)]
     return memory_free_values
+
+############################################################
+
+class CustomBERTModel(nn.Module):
+    def __init__(self, number_of_labels, model_choice, dropout_layer, frozen, 
+                 frozen_layer_count, average_hidden_state, frozen_embeddings):
+
+          super(CustomBERTModel, self).__init__()
+          #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
+          if model_choice == "roberta-large":
+
+            model_encoding = AutoModelForTokenClassification.from_pretrained(model_choice, num_labels=number_of_labels, output_hidden_states=True)
+            embedding_size = 1024
+            self.encoderModel = model_encoding
+
+          elif model_choice == "nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large" or model_choice == "microsoft/deberta-v3-xsmall":
+
+            model_encoding = AutoModelForTokenClassification.from_pretrained(model_choice, num_labels=number_of_labels, output_hidden_states=True)
+            embedding_size = 384
+            self.encoderModel = model_encoding
+
+          else:
+
+            model_encoding = AutoModelForTokenClassification.from_pretrained(model_choice, num_labels=number_of_labels, output_hidden_states=True)
+            embedding_size = 768
+            self.encoderModel = model_encoding
+
+
+
+          if frozen == True:
+            print("Freezing the model parameters")
+            for param in self.encoderModel.parameters():
+                param.requires_grad = False
+
+
+
+          if frozen_layer_count > 0:
+
+            if model_choice == "t5-3b":
+
+                print("Freezing T5-3b")
+                print("Number of Layers: " + str(len(self.encoderModel.encoder.block)))
+
+                for parameter in self.encoderModel.parameters():
+                    parameter.requires_grad = False
+
+                for i, m in enumerate(self.encoderModel.encoder.block):        
+                    #Only un-freeze the last n transformer blocks
+                    if i+1 > 24 - frozen_layer_count:
+                        print(str(i) + " Layer")
+                        for parameter in m.parameters():
+                            parameter.requires_grad = True
+
+            elif model_choice == "distilbert-base-uncased":
+
+                #print(self.encoderModel.__dict__)
+                print("Number of Layers: " + str(len(list(self.encoderModel.transformer.layer))))
+
+                layers_to_freeze = self.encoderModel.transformer.layer[:frozen_layer_count]
+                for module in layers_to_freeze:
+                    for param in module.parameters():
+                        param.requires_grad = False
+
+            else:
+
+                print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
+
+                layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
+                for module in layers_to_freeze:
+                    for param in module.parameters():
+                        param.requires_grad = False
+
+
+
+          
+          if frozen_embeddings == True:
+            print("Frozen Embeddings Layer")
+            #print(self.encoderModel.__dict__)
+            for param in self.encoderModel.embeddings.parameters():
+                param.requires_grad = False
+
+
+          self.added_model_mlp = nn.Sequential(
+                                        nn.Linear(finetuned_embeddings_size, 1024),
+                                        nn.ReLU(),
+                                        #nn.Linear(1024, 1024),
+                                        #nn.ReLU(),
+                                        nn.Linear(1024, embedding_size)
+                                 )
+
+
+          self.embedding_size = embedding_size
+          self.average_hidden_state = average_hidden_state
+
+
+          
+
+    def forward(self, ids, mask, labels, added_model_input_ids, added_model_attention_mask):
+
+            added_model_hidden_state = added_model(added_model_input_ids, added_model_attention_mask)['hidden_states'][0]
+            added_model_hidden_state_transformed = self.added_model_mlp(added_model_hidden_state) / embeddings_divisor
+
+    		############################################
+
+            embeddings = self.encoderModel.roberta.embeddings(ids)
+
+            ############################################
+
+            combined_embeddings = embeddings + added_model_hidden_state_transformed
+
+            extended_attention_mask = self.encoderModel.get_extended_attention_mask(mask, combined_embeddings.size()[:-1], device)
+            last_hidden_state = self.encoderModel.roberta.encoder(combined_embeddings, extended_attention_mask)['last_hidden_state']
+
+            dropout_output = self.encoderModel.dropout(last_hidden_state)
+            logits = self.encoderModel.classifier(dropout_output)
+
+            ############################################
+
+            loss = None
+            if labels is not None:
+                loss_fct = nn.CrossEntropyLoss()
+                # Only keep active parts of the loss
+                if mask is not None:
+                    active_loss = mask.view(-1) == 1
+                    active_logits = logits.view(-1, number_of_labels)
+                    active_labels = torch.where(
+                        active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
+                    )
+                    loss = loss_fct(active_logits, active_labels)
+                else:
+                    loss = loss_fct(logits.view(-1, number_of_labels), labels.view(-1))
+
+            ############################################
+
+            return {'logits': logits, 'loss': loss} #total_output #total_output #classifier_output
+
+
+
+############################################################
 
 def process_NER_dataset(dataset_path):
 
@@ -106,8 +241,105 @@ def tokenize_and_align_labels(examples):
 
     tokenized_inputs["labels"] = labels
 
-    #print("tokenized_inputs keys")
-    #print(tokenized_inputs.keys())
+    ################################################
+
+    if len(tokenized_inputs['input_ids'][0]) > 256:
+    	tokenized_inputs["labels"] = [sub_label_list[:256] for sub_label_list in labels]
+    	tokenized_inputs["input_ids"] = [sub_label_list[:256] for sub_label_list in tokenized_inputs["input_ids"]]
+    	tokenized_inputs["attention_mask"] = [sub_label_list[:256] for sub_label_list in tokenized_inputs["attention_mask"]]
+    else:
+    	
+    	new_labels = []
+    	for sub_label_list in labels:
+    		new_label_sub_list = sub_label_list
+    		while len(new_label_sub_list) < 256:
+    			new_label_sub_list.append(-100)
+    		new_labels.append(new_label_sub_list)
+
+    	new_input_ids = []
+    	for sub_list in tokenized_inputs["input_ids"]:
+    		new_sub_list = sub_list
+    		while len(new_sub_list) < 256:
+    			new_sub_list.append(0)
+    		new_input_ids.append(new_sub_list)
+
+    	new_attention_ids = []
+    	for sub_list in tokenized_inputs["attention_mask"]:
+    		new_sub_list = sub_list
+    		while len(new_sub_list) < 256:
+    			new_sub_list.append(0)
+    		new_attention_ids.append(new_sub_list)
+
+    	tokenized_inputs["labels"] = new_labels
+    	tokenized_inputs["input_ids"] = new_input_ids
+    	tokenized_inputs["attention_mask"] = new_attention_ids
+
+    ################################################
+
+    return tokenized_inputs
+
+############################################################
+
+def tokenize_and_align_labels_added_model(examples):
+    tokenized_inputs = added_model_tokenizer(examples["tokens"], padding=True, truncation=True, is_split_into_words=True)
+
+    labels = []
+    for i, label in enumerate(examples[f"ner_tags"]):
+        word_ids = tokenized_inputs.word_ids(batch_index=i)  # Map tokens to their respective word.
+        previous_word_idx = None
+        label_ids = []
+        for word_idx in word_ids:  # Set the special tokens to -100.
+            if word_idx is None:
+                label_ids.append(-100)
+            elif word_idx != previous_word_idx:  # Only label the first token of a given word.
+                label_ids.append(label[word_idx])
+            else:
+                label_ids.append(-100)
+            previous_word_idx = word_idx
+        labels.append(label_ids)
+
+    if len(labels) != len(examples["tokens"]):
+        print("Labels length unequal to tokenized inputs length")
+
+        new_batch = {'input_ids': batch['input_ids'].to(device),
+                                 'attention_mask': batch['attention_mask'].to(device)}
+
+    ######################################################
+
+    if len(tokenized_inputs['input_ids'][0]) > 256:
+    	tokenized_inputs["labels"] = [sub_label_list[:256] for sub_label_list in labels]
+    	tokenized_inputs["input_ids"] = [sub_label_list[:256] for sub_label_list in tokenized_inputs["input_ids"]]
+    	tokenized_inputs["attention_mask"] = [sub_label_list[:256] for sub_label_list in tokenized_inputs["attention_mask"]]
+    else:
+    	
+    	new_labels = []
+    	for sub_label_list in labels:
+    		new_label_sub_list = sub_label_list
+    		while len(new_label_sub_list) < 256:
+    			new_label_sub_list.append(-100)
+    		new_labels.append(new_label_sub_list)
+
+    	new_input_ids = []
+    	for sub_list in tokenized_inputs["input_ids"]:
+    		new_sub_list = sub_list
+    		while len(new_sub_list) < 256:
+    			new_sub_list.append(0)
+    		new_input_ids.append(new_sub_list)
+
+    	new_attention_ids = []
+    	for sub_list in tokenized_inputs["attention_mask"]:
+    		new_sub_list = sub_list
+    		while len(new_sub_list) < 256:
+    			new_sub_list.append(0)
+    		new_attention_ids.append(new_sub_list)
+
+    	tokenized_inputs["labels"] = new_labels
+    	tokenized_inputs["input_ids"] = new_input_ids
+    	tokenized_inputs["attention_mask"] = new_attention_ids
+
+    tokenized_inputs["added_model_labels"] = tokenized_inputs.pop('labels')
+    tokenized_inputs['added_model_input_ids'] = tokenized_inputs.pop('input_ids')
+    tokenized_inputs['added_model_attention_mask'] = tokenized_inputs.pop('attention_mask')
 
     ################################################
 
@@ -135,6 +367,20 @@ validation_set_scoring = True
 random_state = 42
 
 learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
+
+########################################################################################
+
+added_model_choice = 'allenai/scibert_scivocab_uncased'
+finetuned_embeddings_size = 768
+embeddings_divisor = 10
+
+added_model_tokenizer = AutoTokenizer.from_pretrained(added_model_choice, 
+													  model_max_length=512, add_prefix_space=True)
+added_model = AutoModel.from_pretrained(added_model_choice, output_hidden_states=True)
+added_model.to(device)
+
+
+########################################################################################
  
 #model_choice = 'roberta-large'
 #assigned_batch_size = 32
@@ -144,13 +390,13 @@ learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
 #assigned_batch_size = 32 #16
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True, model_max_length=512)
 
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
-
-model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 assigned_batch_size = 32
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
+
+#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
 
 #model_choice = "distilbert-base-uncased"
 #assigned_batch_size = 16
@@ -318,7 +564,7 @@ for chosen_learning_rate in learning_rate_choices:
                                         'test' : test_dataset_arrow})
 
         tokenized_datasets = classification_dataset.map(tokenize_and_align_labels, batched=True, batch_size=assigned_batch_size)
-
+        tokenized_datasets = tokenized_datasets.map(tokenize_and_align_labels_added_model, batched=True, batch_size=assigned_batch_size)
 
         #tokenized_datasets = tokenized_datasets.remove_columns(["tokens"])
         tokenized_datasets = tokenized_datasets.remove_columns(["tokens", "ner_tags"])
@@ -363,7 +609,8 @@ for chosen_learning_rate in learning_rate_choices:
 
             ############################################################
 
-            model = AutoModelForTokenClassification.from_pretrained(model_choice, num_labels=number_of_labels, output_hidden_states=True)
+            model = CustomBERTModel(number_of_labels, model_choice, current_dropout, 
+                                    frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings)
             #model = RobertaForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
 
             if frozen_layers > 0:
@@ -469,13 +716,15 @@ for chosen_learning_rate in learning_rate_choices:
                 model.train()
                 for batch in train_dataloader:
 
-                    new_batch = {'input_ids': batch['input_ids'].to(device),
-                                 'attention_mask': batch['attention_mask'].to(device)}
-                    labels = batch['labels'].to(device)
+                    new_batch = {'ids': batch['input_ids'].to(device),
+                                 'mask': batch['attention_mask'].to(device),
+                                 'labels': batch['labels'].to(device),
+                                 'added_model_input_ids': batch['added_model_input_ids'].to(device),
+                                 'added_model_attention_mask': batch['added_model_attention_mask'].to(device)}
 
-                    outputs = model(**new_batch, labels=labels)
+                    outputs = model(**new_batch)
 
-                    loss = outputs.loss
+                    loss = outputs['loss']
                     loss.backward()
 
                     optimizer.step()
@@ -490,13 +739,15 @@ for chosen_learning_rate in learning_rate_choices:
                 model.eval()
                 for batch in validation_dataloader:
 
-                        new_batch = {'input_ids': batch['input_ids'].to(device),
-                                     'attention_mask': batch['attention_mask'].to(device)}
-                        labels = batch['labels'].to(device)
+                        new_batch = {'ids': batch['input_ids'].to(device),
+                                 	 'mask': batch['attention_mask'].to(device),
+                                 	 'labels': batch['labels'].to(device),
+                                 	 'added_model_input_ids': batch['added_model_input_ids'].to(device),
+                                 	 'added_model_attention_mask': batch['added_model_attention_mask'].to(device)}
 
-                        outputs = model(**new_batch, labels=labels)
+                        outputs = model(**new_batch)
 
-                        loss = outputs.loss
+                        loss = outputs['loss']
                         loss.backward()
 
                         progress_bar.update(1)
@@ -559,15 +810,18 @@ for chosen_learning_rate in learning_rate_choices:
 
                 with torch.no_grad():
 
-                    new_batch = {'input_ids': batch['input_ids'].to(device),
-                                 'attention_mask': batch['attention_mask'].to(device)}
-                    labels = batch['labels'].to(device)
+                    new_batch = {'ids': batch['input_ids'].to(device),
+                                 'mask': batch['attention_mask'].to(device),
+                                 'labels': batch['labels'].to(device),
+                                 'added_model_input_ids': batch['added_model_input_ids'].to(device),
+                                 'added_model_attention_mask': batch['added_model_attention_mask'].to(device)}
 
-                    outputs = model(**new_batch, labels=labels)
+                    outputs = model(**new_batch)
 
-                    logits = outputs.logits
+                    logits = outputs['logits']
 
                     predictions = torch.argmax(logits, dim=-1)
+                    labels = batch['labels'].to(device)
 
                     #print("actual labels")
                     #print(labels.shape)
@@ -807,5 +1061,5 @@ print("Micro and Macro StDs")
 for dataset in classification_datasets:
 
     print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0], 2))) 
-    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1], 2))) 
+    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1], 2)))
 

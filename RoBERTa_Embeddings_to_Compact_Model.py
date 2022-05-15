@@ -99,13 +99,23 @@ class CustomBERTModel(nn.Module):
 
           ##################################################################
 
-          self.roberta_mlp = nn.Sequential(
-                                    nn.Linear(finetuned_embeddings_size, 1024),
-                                    nn.ReLU(),
-                                    #nn.Linear(1024, 1024),
-                                    #nn.ReLU(),
-                                    nn.Linear(1024, embedding_size)
-                             )
+          if simple_mlp == True:
+
+              print("Loading simple MLP")
+
+              self.roberta_mlp = nn.Sequential(
+                                        nn.Linear(finetuned_embeddings_size, embedding_size)
+                                 )
+
+          else:
+
+              self.roberta_mlp = nn.Sequential(
+                                        nn.Linear(finetuned_embeddings_size, 1024),
+                                        nn.ReLU(),
+                                        #nn.Linear(1024, 1024),
+                                        #nn.ReLU(),
+                                        nn.Linear(1024, embedding_size)
+                                 )
 
           ### New layers:
           self.linear1 = nn.Linear(embedding_size, 256)
@@ -183,27 +193,26 @@ learning_rate_choices = [0.00001, 2e-5, 5e-5, 5e-6]
 ############################################################
 
 load_finetuned_roberta = False
-include_compact_embeddings = True
-normalize_embeddings = False
+simple_mlp = True
 
-#finetuned_model_choice = 'allenai/scibert_scivocab_uncased'
-#finetuned_embeddings_size = 768
+finetuned_model_choice = 'allenai/scibert_scivocab_uncased'
+finetuned_embeddings_size = 768
 
-finetuned_model_choice = 'roberta-large'
-finetuned_embeddings_size = 1024
+#finetuned_model_choice = 'roberta-large'
+#finetuned_embeddings_size = 1024
 roberta_divisor = 10 #100, 50, 25, 10, 5, 1
 
 ############################################################
 
-checkpoint_path = 'checkpoints/checkpoint_scibert_mapping_1338.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
-model_choice = 'allenai/scibert_scivocab_uncased'
-assigned_batch_size = 8
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#checkpoint_path = 'checkpoints/checkpoint_minilm_768_171_mapping.pt'
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+#checkpoint_path = 'checkpoints/checkpoint_scibert_mapping_1338.pt' #'checkpoint38.pt' #'checkpoint36.pt' #'checkpoint34.pt'
+#model_choice = 'allenai/scibert_scivocab_uncased'
 #assigned_batch_size = 8
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+checkpoint_path = 'checkpoints/checkpoint_minilm_768_176_mapping.pt'
+model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+assigned_batch_size = 8
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 
 ############################################################
@@ -255,8 +264,7 @@ for chosen_learning_rate in learning_rate_choices:
         print("Validation Set Choice: " + str(validation_set_scoring))
         print("Number of Epochs: " + str(num_epochs))
         print("Loading Finetuned Embeddings: " + str(load_finetuned_roberta))
-        print("Adding compact embeddings: " + str(include_compact_embeddings))
-        print("Normalize Embeddings: " + str(normalize_embeddings))
+        print("Simple MLP: " + str(simple_mlp))
         print("Added Model Choice: " + str(finetuned_model_choice))
         print("RoBERTa divisor: " + str(roberta_divisor))
 
