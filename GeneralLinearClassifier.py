@@ -29,6 +29,16 @@ import os
 
 from sklearn.model_selection import train_test_split
 import json
+import random
+
+#############################################################
+
+random_state = 42
+
+np.random.seed(random_state)
+random.seed(random_state)
+torch.manual_seed(random_state)
+os.environ['PYTHONHASHSEED'] = str(random_state)
 
 ############################################################
 
@@ -220,9 +230,9 @@ learning_rate_choices = [0.00001, 2e-5, 5e-5, 5e-6]
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-model_choice = 'roberta-large'
-assigned_batch_size = 16
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+#model_choice = 'roberta-large'
+#assigned_batch_size = 16
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = 'microsoft/deberta-v3-small'
 #assigned_batch_size = 32
@@ -244,9 +254,9 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+assigned_batch_size = 32
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = "distilbert-base-uncased"
 #assigned_batch_size = 32

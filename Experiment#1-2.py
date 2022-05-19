@@ -28,6 +28,16 @@ import subprocess as sp
 import os
 
 from sklearn.model_selection import train_test_split
+import random
+
+#############################################################
+
+random_state = 42
+
+np.random.seed(random_state)
+random.seed(random_state)
+torch.manual_seed(random_state)
+os.environ['PYTHONHASHSEED'] = str(random_state)
 
 ############################################################
 

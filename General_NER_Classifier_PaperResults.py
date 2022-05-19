@@ -33,6 +33,17 @@ from sklearn.model_selection import train_test_split
 
 from tokenizers import PreTokenizedInputSequence
 import json
+import random
+
+
+#############################################################
+
+random_state = 42
+
+np.random.seed(random_state)
+random.seed(random_state)
+torch.manual_seed(random_state)
+os.environ['PYTHONHASHSEED'] = str(random_state)
 
 ############################################################
 
@@ -111,6 +122,39 @@ def tokenize_and_align_labels(examples):
 
     ################################################
 
+    if len(tokenized_inputs['input_ids'][0]) > 256:
+    	tokenized_inputs["labels"] = [sub_label_list[:256] for sub_label_list in labels]
+    	tokenized_inputs["input_ids"] = [sub_label_list[:256] for sub_label_list in tokenized_inputs["input_ids"]]
+    	tokenized_inputs["attention_mask"] = [sub_label_list[:256] for sub_label_list in tokenized_inputs["attention_mask"]]
+    else:
+    	
+    	new_labels = []
+    	for sub_label_list in labels:
+    		new_label_sub_list = sub_label_list
+    		while len(new_label_sub_list) < 256:
+    			new_label_sub_list.append(-100)
+    		new_labels.append(new_label_sub_list)
+
+    	new_input_ids = []
+    	for sub_list in tokenized_inputs["input_ids"]:
+    		new_sub_list = sub_list
+    		while len(new_sub_list) < 256:
+    			new_sub_list.append(0)
+    		new_input_ids.append(new_sub_list)
+
+    	new_attention_ids = []
+    	for sub_list in tokenized_inputs["attention_mask"]:
+    		new_sub_list = sub_list
+    		while len(new_sub_list) < 256:
+    			new_sub_list.append(0)
+    		new_attention_ids.append(new_sub_list)
+
+    	tokenized_inputs["labels"] = new_labels
+    	tokenized_inputs["input_ids"] = new_input_ids
+    	tokenized_inputs["attention_mask"] = new_attention_ids
+
+    ################################################
+
     return tokenized_inputs
 
 ############################################################
@@ -129,24 +173,31 @@ frozen_choice = False
 #chosen_learning_rate =  0.0001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 average_hidden_state = False
 validation_set_scoring = False
-random_state = 42
 
 ############################################################
 
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 
-learning_rate_for_each_dataset = [5e-5, 5e-6, 5e-5]
+learning_rate_for_each_dataset = [2e-5, 2e-5, 5e-6]
 
 ############################################################
+
+model_choice = 'roberta-large'
+assigned_batch_size = 32
+tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
+
+#model_choice = 'allenai/scibert_scivocab_uncased'
+#assigned_batch_size = 32 #16
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True, model_max_length=512)
  
 #model_choice = "distilbert-base-uncased"
 #assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-assigned_batch_size = 32
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
+#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+#assigned_batch_size = 32
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
 
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #assigned_batch_size = 32
@@ -175,11 +226,15 @@ for dataset in classification_datasets:
 
 ############################################################
 
-ner_checkpoints_path = "checkpoints/ner/"
-if not os.path.isdir(ner_checkpoints_path):
-    os.mkdir(ner_checkpoints_path)
+dataset_folder_path = "paper_results_ner/"
 
-dataset_folder_path = "checkpoints/ner/" + model_choice.replace("/", "-")
+if not os.path.isdir(dataset_folder_path):
+
+	print("Creating folder: " + dataset_folder_path)
+	os.mkdir(dataset_folder_path)
+
+dataset_folder_path += model_choice.replace("/", "-") + "/"
+
 if not os.path.isdir(dataset_folder_path):
 
     print("Creating folder: " + dataset_folder_path)
@@ -187,10 +242,11 @@ if not os.path.isdir(dataset_folder_path):
 
 for dataset in classification_datasets:
     try:
-        os.mkdir(dataset_folder_path + "/" + dataset)
+        print("Making: " + dataset_folder_path + dataset)
+        os.mkdir(dataset_folder_path + dataset)
     except:
         print("Already exists")
-        print(dataset_folder_path + "/" + dataset)
+        print(dataset_folder_path + dataset)
 
 ############################################################
 
@@ -215,10 +271,6 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
         print("For dataset: " + dataset)
         print("--------------------------------------------------------------------------")
 
-        checkpoint_path = "checkpoints/ner/" + model_choice.replace("/", "-") + "/" + dataset + "/" + str(chosen_learning_rate) + "_"
-        checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
-        checkpoint_path += str(validation_set_scoring) + ".pt"
-
         ##################################################
 
         print("GPU Memory available at the start")
@@ -232,7 +284,6 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
         print("Frozen Choice: " + str(frozen_choice))
         print("Number of Runs: " + str(number_of_runs))
         print('Learning Rate: ' + str(chosen_learning_rate))
-        print("Checkpoint Path: " + checkpoint_path)
         print("Number of Frozen Layers: " + str(frozen_layers))
         print("Frozen Embeddings: " + str(frozen_embeddings))
         print("Patience: " + str(patience_value))
@@ -348,11 +399,19 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
 
         lowest_recorded_validation_loss = 10000
 
+        macro_f1_scores = []
+        micro_f1_scores = []
+
         for i in range(0, number_of_runs):
+
+            checkpoint_path = "paper_results_ner/" + model_choice.replace("/", "-") + "/" + dataset + "/" + str(chosen_learning_rate) + "_"
+            checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
+            checkpoint_path += str(validation_set_scoring) + "_Run_" + str(i) + ".pt"
 
             run_start = time.time()
 
             print("Loading Model")
+            print("Checkpoint: " + checkpoint_path)
 
             train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
             validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
@@ -534,59 +593,72 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
 
 
 
-        ############################################################
+	        ############################################################
 
-        print("Loading the Best Model")
+            print("Loading the Best Model")
 
-        model.load_state_dict(torch.load(best_model_save_path))
+            model.load_state_dict(torch.load(checkpoint_path))
 
-        ############################################################
+            ############################################################
 
-        print("Beginning Evaluation")
+            print("Beginning Evaluation")
 
-        metric = load_metric("accuracy")
+            metric = load_metric("accuracy")
 
-        total_predictions = torch.FloatTensor([]).to(device)
-        total_references = torch.FloatTensor([]).to(device)
+            total_predictions = torch.FloatTensor([]).to(device)
+            total_references = torch.FloatTensor([]).to(device)
 
-        progress_bar = tqdm(range(len(eval_dataloader)))
-        for batch in eval_dataloader:
+            progress_bar = tqdm(range(len(eval_dataloader)))
+            for batch in eval_dataloader:
 
-            with torch.no_grad():
+                with torch.no_grad():
 
-                new_batch = {'input_ids': batch['input_ids'].to(device),
-                             'attention_mask': batch['attention_mask'].to(device)}
-                labels = batch['labels'].to(device)
+                    new_batch = {'input_ids': batch['input_ids'].to(device),
+                                 'attention_mask': batch['attention_mask'].to(device)}
+                    labels = batch['labels'].to(device)
 
-                outputs = model(**new_batch, labels=labels)
+                    outputs = model(**new_batch, labels=labels)
 
-                logits = outputs.logits
+                    logits = outputs.logits
 
-                predictions = torch.argmax(logits, dim=-1)
+                    predictions = torch.argmax(logits, dim=-1)
 
-                total_predictions = torch.cat((total_predictions, torch.flatten(predictions)), 0)
-                total_references = torch.cat((total_references, torch.flatten(labels)), 0)
+                    total_predictions = torch.cat((total_predictions, torch.flatten(predictions)), 0)
+                    total_references = torch.cat((total_references, torch.flatten(labels)), 0)
 
-                progress_bar.update(1)
+                    progress_bar.update(1)
 
+            ######################################################################
 
+            new_total_predictions = []
+            new_total_references = []
 
-        ############################################################
+            for j in tqdm(range(0, len(total_predictions))):
+                if total_references[j] != -100:
+                    new_total_predictions.append(total_predictions[j])
+                    new_total_references.append(total_references[j])
 
-        # Remove all the -100 references and predictions for calculating macro f-1 scores
+            new_total_predictions = torch.FloatTensor(new_total_predictions)
+            new_total_references = torch.FloatTensor(new_total_references)
 
-        new_total_predictions = []
-        new_total_references = []
+            ######################################################################
 
-        for j in tqdm(range(0, len(total_predictions))):
-            if total_references[j] != -100:
-                new_total_predictions.append(total_predictions[j])
-                new_total_references.append(total_references[j])
+            print("-----------------------------------------------------------------")
 
-        new_total_predictions = torch.FloatTensor(new_total_predictions)
-        new_total_references = torch.FloatTensor(new_total_references)
+            f_1_metric = load_metric("f1")
+            macro_f_1_results = f_1_metric.compute(average='macro', references=new_total_predictions, predictions=new_total_references)
+            print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
+            micro_f_1_results = f_1_metric.compute(average='micro', references=new_total_predictions, predictions=new_total_references)
+            print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']  * 100))
 
-        ############################################################
+            macro_f1_scores.append(macro_f_1_results['f1'] * 100)
+            micro_f1_scores.append(micro_f_1_results['f1']  * 100)
+
+            print("GPU Memory available at the end")
+            print(get_gpu_memory())
+            print("-----------------------------------------------------------------")
+
+            ############################################################
 
         print("-----------------------------------------------------------------")
         print("Final Results for Spreadsheet")
@@ -601,15 +673,14 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
         print("Validation Set Choice: " + str(validation_set_scoring))
         print("-----------------------------------------------------------------")
 
-        f_1_metric = load_metric("f1")
-        micro_f_1_results = f_1_metric.compute(average='micro', references=new_total_predictions, predictions=new_total_references)
-        print("Micro F1 for Test Set: " + str(micro_f_1_results['f1'] * 100))
-        macro_f_1_results = f_1_metric.compute(average='macro', references=new_total_predictions, predictions=new_total_references)
-        print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
-
-        print("GPU Memory available at the end")
-        print(get_gpu_memory())
+        print("Micro and Macro F1 Scores")
+        print(str(round(statistics.mean(micro_f1_scores), 2)))
+        print(str(round(statistics.mean(macro_f1_scores), 2)))
         print("-----------------------------------------------------------------")
+        
+        print("Micro and Macro F1 Standard Deviations")
+        print(str(round(statistics.stdev(micro_f1_scores), 2)))
+        print(str(round(statistics.stdev(macro_f1_scores), 2)))
 
-        ############################################################
+        print("-----------------------------------------------------------------")
 
