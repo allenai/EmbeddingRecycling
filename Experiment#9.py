@@ -64,7 +64,7 @@ average_hidden_state = False
 
 random_state = 42
 
-validation_set_scoring = True
+validation_set_scoring = False
 
 learning_rate_choices = [0.0001, 2e-5, 5e-5, 5e-6] #1e-5
 
@@ -200,6 +200,8 @@ for chosen_learning_rate in learning_rate_choices:
 	    ############################################################
 
 	    if validation_set_scoring == True:
+
+	        print("Correctly validation scoring")
 
 	        training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
 	        train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)

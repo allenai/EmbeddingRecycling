@@ -180,15 +180,18 @@ class CustomBERTModel(nn.Module):
 
           ###########################################################
 
-          inner_hidden_state_output = self.encoderModel(input_ids, attention_mask)['last_hidden_state']
+          embeddings_output = self.encoderModel.embeddings(input_ids)
 
           ###########################################################
 
-          combined_hidden_states = inner_hidden_state_output + roberta_hidden_state_transformed
+          combined_embeddings = embeddings_output + roberta_hidden_state_transformed
 
           ###########################################################
 
-          compact_model_output = combined_hidden_states
+          extended_attention_mask = self.encoderModel.get_extended_attention_mask(attention_mask, combined_embeddings.size()[:-1], device)
+          last_hidden_state = self.encoderModel.encoder(combined_embeddings, extended_attention_mask)['last_hidden_state']
+
+          compact_model_output = last_hidden_state
           compact_model_output = compact_model_output[:,0,:].view(-1, self.embedding_size)
 
           linear1_output = self.linear1(compact_model_output)
