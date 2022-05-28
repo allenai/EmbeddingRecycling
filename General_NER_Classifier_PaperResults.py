@@ -174,33 +174,31 @@ frozen_choice = False
 average_hidden_state = False
 validation_set_scoring = False
 
+assigned_batch_size = 8
+gradient_accumulation_multiplier = 4
+
 ############################################################
 
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 
-learning_rate_for_each_dataset = [2e-5, 2e-5, 5e-6]
+learning_rate_for_each_dataset = [5e-5, 5e-6, 5e-5]
 
 ############################################################
 
-model_choice = 'roberta-large'
-assigned_batch_size = 32
-tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
+#model_choice = 'roberta-large'
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
 #model_choice = 'allenai/scibert_scivocab_uncased'
-#assigned_batch_size = 32 #16
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True, model_max_length=512)
  
 #model_choice = "distilbert-base-uncased"
-#assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#assigned_batch_size = 32
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
+model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
 
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
-#assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
 
 ############################################################
@@ -520,6 +518,8 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
 
                 progress_bar = tqdm(range(len(train_dataloader)))
 
+                gradient_accumulation_count = 0
+
                 model.train()
                 for batch in train_dataloader:
 
@@ -532,9 +532,12 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
                     loss = outputs.loss
                     loss.backward()
 
-                    optimizer.step()
-                    lr_scheduler.step()
-                    optimizer.zero_grad()
+                    gradient_accumulation_count += 1
+                    if gradient_accumulation_count % (gradient_accumulation_multiplier) == 0:
+                        optimizer.step()
+                        lr_scheduler.step()
+                        optimizer.zero_grad()
+                        
                     progress_bar.update(1)
                     train_losses.append(loss.item())
 

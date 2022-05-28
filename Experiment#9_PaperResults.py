@@ -1,6 +1,5 @@
 
 
-
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel, RobertaForSequenceClassification
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer, AutoModelForSequenceClassification
@@ -63,10 +62,10 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sciie-relation-extraction']
 #classification_datasets = ['mag']
 
-num_epochs = 100 #1000 #10
+num_epochs = 1000 #1000 #10
 patience_value = 10 #10 #3
 current_dropout = True
-number_of_runs = 3 #1 #5
+number_of_runs = 10 #1 #5
 frozen_choice = False
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
@@ -77,23 +76,15 @@ validation_set_scoring = True
 assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
 
-#learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
-#learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6]
-
-#learning_rate_choices = [0.001, 0.005, 0.0001, 0.0005, 1e-5, 5e-5] #1e-5
-#learning_rate_choices = [0.001, 0.003, 0.0002]
-
-learning_rate_choices = [5e-6]
-
 ############################################################
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
-bottleneck_value = 256
+
+chosen_learning_rate_choices = [1e-4, 2e-4, 2e-4]
+chosen_bottleneck_values = [256, 64, 256]
 
 model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
-
-checkpoint_path = 'checkpoints/experiment9_checkpoint2866.pt'
 
 use_all_adapter = False
 
@@ -138,17 +129,37 @@ def tokenize_function(examples):
 
 ############################################################
 
+dataset_folder_path = "paper_results/"
+
+if not os.path.isdir(dataset_folder_path):
+
+	print("Creating folder: " + dataset_folder_path)
+	os.mkdir(dataset_folder_path)
+
+dataset_folder_path += model_choice.replace("/", "-") + "/"
+
+if not os.path.isdir(dataset_folder_path):
+
+    print("Creating folder: " + dataset_folder_path)
+    os.mkdir(dataset_folder_path)
+
+for dataset in classification_datasets:
+    try:
+        print("Making: " + dataset_folder_path + dataset)
+        os.mkdir(dataset_folder_path + dataset)
+    except:
+        print("Already exists")
+        print(dataset_folder_path + dataset)
+
+############################################################
+
 learning_rate_to_results_dict = {}
 
-for chosen_learning_rate in learning_rate_choices:
+for chosen_learning_rate, bottleneck_value, dataset in zip(chosen_learning_rate_choices, chosen_bottleneck_values, classification_datasets):
 
-	print("--------------------------------------------------------------------------")
-	print("Starting new learning rate: " + str(chosen_learning_rate))
-	print("--------------------------------------------------------------------------")
-
-	current_learning_rate_results = {}
-
-	for dataset in classification_datasets:
+	    print("--------------------------------------------------------------------------")
+	    print("Starting new learning rate and bottleneck value: " + str(chosen_learning_rate) + " " + str(bottleneck_value))
+	    print("--------------------------------------------------------------------------")
 
 	    print("GPU Memory available at the start")
 	    print(get_gpu_memory())
@@ -161,7 +172,6 @@ for chosen_learning_rate in learning_rate_choices:
 	    print("Frozen Choice: " + str(frozen_choice))
 	    print("Number of Runs: " + str(number_of_runs))
 	    print('Learning Rate: ' + str(chosen_learning_rate))
-	    print("Checkpoint Path: " + checkpoint_path)
 	    print("Number of Frozen Layers: " + str(frozen_layers))
 	    print("Frozen Embeddings: " + str(frozen_embeddings))
 	    print("Patience: " + str(patience_value))
@@ -170,7 +180,7 @@ for chosen_learning_rate in learning_rate_choices:
 	    print("Number of Epochs: " + str(num_epochs))
 	    print("Bottleneck Value Choice: " + str(bottleneck_value))
 	    print("Batch Size: " + str(assigned_batch_size * gradient_accumulation_multiplier))
-	    print("Adapters on All Layers: " + str(starting_layer_for_adapters))
+	    print("Adapters on All Layers: " + str(use_all_adapter))
 	    print("Unfrozen Components: " + str(unfrozen_components))
 
 	    # Chemprot train, dev, and test
@@ -277,6 +287,10 @@ for chosen_learning_rate in learning_rate_choices:
 	    inference_times = []
 
 	    for i in range(0, number_of_runs):
+
+	        checkpoint_path = "paper_results/" + model_choice.replace("/", "-") + "/" + dataset + "/experiment9_" + str(chosen_learning_rate) + "_"
+	        checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
+	        checkpoint_path += str(validation_set_scoring) + "_Run_" + str(i) + ".pt"
 
 	        print("Loading Model")
 
@@ -494,7 +508,9 @@ for chosen_learning_rate in learning_rate_choices:
 	        micro_averages.append(micro_f_1_results['f1'])
 	        macro_averages.append(macro_f_1_results['f1'])
 
-
+	    print("--------------------------------------------------")
+	    print("Final Results for Paper")
+	    print("--------------------------------------------------")
 	    print("Processing " + dataset + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
 	    print('micro_averages: ' + str(micro_averages))
 	    print("Micro F1 Average: " + str(statistics.mean(micro_averages) * 100))
@@ -511,105 +527,7 @@ for chosen_learning_rate in learning_rate_choices:
 
 	    print("GPU Memory available at the end")
 	    print(get_gpu_memory())
+	    print("--------------------------------------------------")
 
 	    ############################################################
-
-	    current_learning_rate_results[dataset + "_micro_f1_average"] =  statistics.mean(micro_averages) * 100
-	    current_learning_rate_results[dataset + "_macro_f1_average"] =  statistics.mean(macro_averages) * 100
-
-	    if len(micro_averages) > 1:
-	    	current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages) * 100
-	    	current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages) * 100
-	    else:
-	    	current_learning_rate_results[dataset + "_micro_f1_std"] =  0
-	    	current_learning_rate_results[dataset + "_macro_f1_std"] =  0
-
-	############################################################
-    
-	learning_rate_to_results_dict[str(chosen_learning_rate)] = current_learning_rate_results
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-############################################################
-
-print("-----------------------------------------------------------------")
-print("Final Results: Best LR for each dataset")
-print("-----------------------------------------------------------------")
-
-dataset_to_best_lr_dict = {}
-
-for dataset in classification_datasets:
-
-    best_lr = learning_rate_choices[0]
-    best_combined_f1 = [0, 0]
-    best_combined_stds = [0, 0]
-
-    for chosen_learning_rate in learning_rate_choices:
-
-        current_combined_macro_micro_f1 = [learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_average"],
-                                           learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_average"]]
-
-        if sum(best_combined_f1) < sum(current_combined_macro_micro_f1):
-            best_lr = chosen_learning_rate
-            best_combined_f1 = current_combined_macro_micro_f1
-            best_combined_stds = [learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_std"],
-                                  learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_std"]]
-
-    dataset_to_best_lr_dict[dataset] = {
-                                            'best_lr': best_lr,
-                                            'best_combined_f1': best_combined_f1,
-                                            'best_combined_stds': best_combined_stds
-                                       }
-
-    print("--------------------------------------------")
-    print("Results for " + dataset)
-    print("Best LR: " + str(dataset_to_best_lr_dict[dataset]['best_lr']))
-    print("Best Micro F1: " + str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][0]))
-    print("Best Macro F1: " + str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][1]))
-    print("Micro StD: " + str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0]))
-    print("Macro StD: " + str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1]))
-    print("--------------------------------------------")
-
-print("-----------------------------------------------------------------")
-print("Final Results for Spreadsheet")
-print("-----------------------------------------------------------------")
-print("Dataset: " + dataset)
-print("Model: " + model_choice)
-print("Number of Runs: " + str(number_of_runs))
-print("Number of Epochs: " + str(num_epochs))
-print("Patience: " + str(patience_value))
-print("Number of Frozen Layers: " + str(frozen_layers))
-print("Frozen Embeddings: " + str(frozen_embeddings))
-print("Validation Set Choice: " + str(validation_set_scoring))
-print("-----------------------------------------------------------------")
-
-print("Learning Rates")
-for dataset in classification_datasets:
-
-    print(str(dataset_to_best_lr_dict[dataset]['best_lr']))
-
-print("-----------------------------------------------------------------")
-print("Micro and Macro F1 Scores")
-for dataset in classification_datasets:
-
-    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_f1'][0], 2))) 
-    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_f1'][1], 2))) 
-
-print("-----------------------------------------------------------------")
-print("Micro and Macro StDs")
-for dataset in classification_datasets:
-
-    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0], 2))) 
-    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1], 2))) 
 

@@ -2,7 +2,7 @@
 
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel
-from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
+from transformers import BertModel, AutoTokenizer, AutoModel, DistilBertModel
 import tensorflow as tf
 
 import pandas as pd
@@ -78,6 +78,12 @@ class CustomBERTModel(nn.Module):
             embedding_size = 1024
             self.encoderModel = model_encoding
 
+          elif model_choice == 'distilbert-base-uncased':
+
+            model_encoding = DistilBertModel.from_pretrained('distilbert-base-uncased')
+            embedding_size = 768
+            self.encoderModel = model_encoding
+
           else:
 
             model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
@@ -106,6 +112,15 @@ class CustomBERTModel(nn.Module):
                         print(str(i) + " Layer")
                         for parameter in m.parameters():
                             parameter.requires_grad = True
+
+            elif model_choice == 'distilbert-base-uncased':
+
+                print("Number of Layers: " + str(len(list(self.encoderModel.transformer.layer))))
+
+                layers_to_freeze = self.encoderModel.transformer.layer[:frozen_layer_count]
+                for module in layers_to_freeze:
+                    for param in module.parameters():
+                        param.requires_grad = False
 
             else:
 
@@ -166,7 +181,11 @@ class CustomBERTModel(nn.Module):
           
 
           print("Number of layers")
-          print(len(self.encoderModel.encoder.layer))
+          if model_choice == 'distilbert-base-uncased':
+            #print(self.encoderModel.__dict__)
+            print(len(self.encoderModel.transformer.layer))
+          else:
+            print(len(self.encoderModel.encoder.layer))
 
           #self.encoderModel.encoder = deleteEncodingLayers(self.encoderModel, 3)
 
@@ -180,16 +199,24 @@ class CustomBERTModel(nn.Module):
 
           ###########################################################
 
-          embeddings_output = self.encoderModel.embeddings(input_ids)
+          if model_choice == "distilbert-base-uncased":
+
+            last_hidden_state = self.encoderModel(input_ids, attention_mask, 
+                                                  additional_embeddings=roberta_hidden_state_transformed)
+
+            last_hidden_state = last_hidden_state['last_hidden_state']
+
+          else:
+
+            embeddings_output = self.encoderModel.embeddings(input_ids)
+            combined_embeddings = embeddings_output + roberta_hidden_state_transformed
+
+            ###########################################################
+
+            extended_attention_mask = self.encoderModel.get_extended_attention_mask(attention_mask, combined_embeddings.size()[:-1], device)
+            last_hidden_state = self.encoderModel.encoder(combined_embeddings, extended_attention_mask)['last_hidden_state']
 
           ###########################################################
-
-          combined_embeddings = embeddings_output + roberta_hidden_state_transformed
-
-          ###########################################################
-
-          extended_attention_mask = self.encoderModel.get_extended_attention_mask(attention_mask, combined_embeddings.size()[:-1], device)
-          last_hidden_state = self.encoderModel.encoder(combined_embeddings, extended_attention_mask)['last_hidden_state']
 
           compact_model_output = last_hidden_state
           compact_model_output = compact_model_output[:,0,:].view(-1, self.embedding_size)
@@ -215,44 +242,48 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sciie-relation-extraction']
 #classification_datasets = ['mag']
 
-num_epochs = 50 #1000 #10
+num_epochs = 100 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 3 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 2 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_layers = 3 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = True
 average_hidden_state = False
 
 validation_set_scoring = True
 
-random_state = 42
+assigned_batch_size = 8
+gradient_accumulation_multiplier = 4
 
 #learning_rate_choices = [0.0001, 0.00001, 2e-5, 5e-5, 5e-6]
-learning_rate_choices = [0.00001, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
 
 ############################################################
 
 load_finetuned_roberta = False
-simple_mlp = False
 
-finetuned_model_choice = 'allenai/scibert_scivocab_uncased'
-finetuned_embeddings_size = 768
-assigned_batch_size = 16
-#layer_extracted_choice = 6
+#finetuned_model_choice = 'allenai/scibert_scivocab_uncased'
+#finetuned_embeddings_size = 768
 
 #finetuned_model_choice = 'roberta-large'
 #finetuned_embeddings_size = 1024
-#assigned_batch_size = 8
-#layer_extracted_choice = 12
+
+finetuned_model_choice = 'bert-base-uncased'
+finetuned_embeddings_size = 768
 
 roberta_divisor = 10 #100, 50, 25, 10, 5, 1
+simple_mlp = False
 
 ############################################################
 
-checkpoint_path = 'checkpoints/checkpoint_minilm_768_189_mapping.pt'
-model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+#checkpoint_path = 'checkpoints/experiment10_542.pt'
+#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+checkpoint_path = 'checkpoints/experiment10_768.pt'
+model_choice = "distilbert-base-uncased"
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 ############################################################
@@ -514,6 +545,8 @@ for chosen_learning_rate in learning_rate_choices:
 
                 progress_bar = tqdm(range(len(train_dataloader)))
 
+                gradient_accumulation_count = 0
+
                 model.train()
                 for batch in train_dataloader:
 
@@ -530,11 +563,14 @@ for chosen_learning_rate in learning_rate_choices:
                         loss = criterion(outputs, labels)
 
                         loss.backward()
-                        optimizer.step()
-                        lr_scheduler.step()
-                        optimizer.zero_grad()
-                        progress_bar.update(1)
 
+                        gradient_accumulation_count += 1
+                        if gradient_accumulation_count % (gradient_accumulation_multiplier) == 0:
+                            optimizer.step()
+                            lr_scheduler.step()
+                            optimizer.zero_grad()
+                        
+                        progress_bar.update(1)
                         train_losses.append(loss.item())
 
 

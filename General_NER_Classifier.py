@@ -145,33 +145,30 @@ validation_set_scoring = True
 random_state = 42
 
 learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
+assigned_batch_size = 8
+gradient_accumulation_multiplier = 4
+
+############################################################
  
 model_choice = 'roberta-large'
-assigned_batch_size = 32
 tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
 #model_choice = 'allenai/scibert_scivocab_uncased'
-#assigned_batch_size = 32 #16
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True, model_max_length=512)
 
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
 
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
-#assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
 
 #model_choice = "distilbert-base-uncased"
-#assigned_batch_size = 16
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = 'microsoft/deberta-v3-small'
-#assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = 'microsoft/deberta-v3-xsmall'
-#assigned_batch_size = 32
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 ############################################################
@@ -476,6 +473,8 @@ for chosen_learning_rate in learning_rate_choices:
 
                 progress_bar = tqdm(range(len(train_dataloader)))
 
+                gradient_accumulation_count = 0
+
                 model.train()
                 for batch in train_dataloader:
 
@@ -488,9 +487,12 @@ for chosen_learning_rate in learning_rate_choices:
                     loss = outputs.loss
                     loss.backward()
 
-                    optimizer.step()
-                    lr_scheduler.step()
-                    optimizer.zero_grad()
+                    gradient_accumulation_count += 1
+                    if gradient_accumulation_count % (gradient_accumulation_multiplier) == 0:
+                        optimizer.step()
+                        lr_scheduler.step()
+                        optimizer.zero_grad()
+                        
                     progress_bar.update(1)
                     train_losses.append(loss.item())
 
