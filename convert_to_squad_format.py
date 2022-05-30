@@ -57,9 +57,6 @@ def convert_to_squad_format(qa_json_file, squad_file):
     qa_json = utils.dataset_utils.read_triviaqa_data(qa_json_file)
     qad_triples = get_qad_triples(qa_json)
 
-    random.seed(args.seed)
-    random.shuffle(qad_triples)
-
     data = []
     for qad in tqdm(qad_triples):
         qid = qad['QuestionId']

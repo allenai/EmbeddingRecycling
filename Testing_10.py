@@ -1,7 +1,7 @@
 
 import json
-from datasets import load_dataset, load_from_disk, DatasetDict, Dataset
-from transformers import DefaultDataCollator, AutoTokenizer, get_scheduler
+from datasets import load_dataset, load_from_disk, DatasetDict, Dataset, load_metric
+from transformers import DefaultDataCollator, AutoTokenizer, get_scheduler, AutoModelForQuestionAnswering
 from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
 from tqdm import tqdm
 import torch.nn as nn
@@ -34,92 +34,76 @@ os.environ['PYTHONHASHSEED'] = str(random_state)
 
 ############################################################
 
-def preprocess_function(examples):
-    questions = [q.strip() for q in examples["question"]]
-    inputs = tokenizer(
-        questions,
-        examples["context"],
-        max_length=384,
-        truncation="only_second",
-        return_offsets_mapping=True,
-        padding="max_length",
-    )
+def find_all(a_str, sub):
+    start = 0
+    while True:
+        start = a_str.find(sub, start)
+        if start == -1: return
+        yield start
+        start += len(sub) # use start += 1 to find overlapping matches
 
-    offset_mapping = inputs.pop("offset_mapping")
-    answers = examples["answers"]
-    start_positions = []
-    end_positions = []
+def findIndexesOfAnswers(substring_list, context):
 
-    for i, offset in enumerate(offset_mapping):
-        answer = answers[i]
-        start_char = answer["answer_start"][0]
-        end_char = answer["answer_start"][0] + len(answer["text"][0])
-        sequence_ids = inputs.sequence_ids(i)
+	found_aliases = []
+	indices = []
 
-        # Find the start and end of the context
-        idx = 0
-        while sequence_ids[idx] != 1:
-            idx += 1
-        context_start = idx
-        while sequence_ids[idx] == 1:
-            idx += 1
-        context_end = idx - 1
+	for substring in substring_list:
+		
+		currentIndices = list(find_all(context, substring))
 
-        # If the answer is not fully inside the context, label it (0, 0)
-        if offset[context_start][0] > end_char or offset[context_end][1] < start_char:
-            start_positions.append(0)
-            end_positions.append(0)
-        else:
-            # Otherwise it's the start and end token positions
-            idx = context_start
-            while idx <= context_end and offset[idx][0] <= start_char:
-                idx += 1
-            start_positions.append(idx - 1)
+		for currentIndex in currentIndices:
+			if currentIndex >= 0:
+				found_aliases.append(substring)
+				indices.append(currentIndex)
 
-            idx = context_end
-            while idx >= context_start and offset[idx][1] >= end_char:
-                idx -= 1
-            end_positions.append(idx + 1)
-
-    inputs["start_positions"] = start_positions
-    inputs["end_positions"] = end_positions
-    return inputs
+	return found_aliases, indices
 
 ########################################################################
 
-def reformatExamples(file_name):
+def reformat_trivia_qa(examples):
 
-	reformatted_examples = []
-	with open('../triviaqa/triviaqa_squad_format.json', 'r') as f:
-		data = json.load(f)
+	ids = []
+	titles = []
+	contexts = []
+	questions = []
+	answers = []
 
-		for item in tqdm(data):
+	for i in range(0, len(examples['question_id'])):
 
-			for sub_item in item['paragraphs']:
+		current_context = (" ").join(examples['search_results'][i]['search_context'])
 
-				if len(sub_item['qas'][0]['answers']) > 0:
+		if len(current_context) == 0:
+			#print("Error!")
+			current_context = (" ").join(examples['entity_pages'][i]['wiki_context'])
+			if len(current_context) == 0:
+				print("Major Error!")
 
-					reformatted_answers = {"text": [sub_item['qas'][0]['answers'][0]['text']],
-										   "answer_start": [sub_item['qas'][0]['answers'][0]['answer_start']]}
+		current_text, current_found_answers = findIndexesOfAnswers(examples['answer'][i]['aliases'], current_context)
+		current_answers = {'text': current_text, 'answer_start': current_found_answers}
 
-					current_example = 	{
-										   'id': sub_item['qas'][0]['id'],
-										   'title': sub_item['qas'][0]['question'],
-										   'context': sub_item['context'],
-										   'question': sub_item['qas'][0]['question'],
-										   'answers': reformatted_answers
-										}
-					reformatted_examples.append(current_example)
+		if len(current_text) == 0:
+			current_context = "Error"
 
-				else:
+		ids.append(examples['question_id'][i])
+		titles.append("")
+		contexts.append(current_context)
+		questions.append(examples['question'][i])
+		answers.append(current_answers)
 
-					print("Missing answer!")
+	#################################################
 
-	return reformatted_examples
+	inputs = {
+		'id': ids,
+		'title': titles,
+		'context': contexts,
+		'question': questions,
+		'answers': answers
+	}
+
+	return inputs
+
 
 ########################################################################
-
-############################################################
 
 class CustomBERTModel(nn.Module):
     def __init__(self, model_choice, dropout_layer, frozen, 
@@ -129,19 +113,13 @@ class CustomBERTModel(nn.Module):
 
           if model_choice == 'roberta-large':
 
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+            model_encoding = AutoModelForQuestionAnswering.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
-            self.encoderModel = model_encoding
-
-          elif model_choice == 'distilbert-base-uncased':
-
-            model_encoding = DistilBertModel.from_pretrained('distilbert-base-uncased')
-            embedding_size = 768
             self.encoderModel = model_encoding
 
           else:
 
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+            model_encoding = AutoModelForQuestionAnswering.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 768
             self.encoderModel = model_encoding
 
@@ -170,12 +148,25 @@ class CustomBERTModel(nn.Module):
 
             else:
 
-                print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
+                if model_choice == "distilbert-base-uncased":
 
-                layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
-                for module in layers_to_freeze:
-                    for param in module.parameters():
-                        param.requires_grad = False
+                    print("Number of Layers: " + str(len(list(self.encoderModel.distilbert.transformer.layer))))
+
+                    layers_to_freeze = self.encoderModel.distilbert.transformer.layer[:frozen_layer_count]
+                    for module in layers_to_freeze:
+                        for param in module.parameters():
+                            param.requires_grad = False
+
+                else:
+
+                    print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
+
+                    layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
+                    for module in layers_to_freeze:
+                        for param in module.parameters():
+                            param.requires_grad = False
+
+
 
           
           if frozen_embeddings == True:
@@ -207,14 +198,14 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-num_epochs = 100 #1000 #10
-patience_value = 10 #10 #3
+num_epochs = 10 #1000 #10
+patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 10 #1 #5
+number_of_runs = 3 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 3 #12 layers for BERT total, 24 layers for T5 and RoBERTa
-frozen_embeddings = True
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_embeddings = False
 average_hidden_state = False
 
 validation_set_scoring = False
@@ -228,12 +219,10 @@ validation_set_scoring = True
 
 ############################################################
 
-dataset = "wikipedia"
+warmup_steps_count = 500
+
 model_choice = "distilbert-base-uncased"
 checkpoint_path = 'checkpoints/experiment10_768.pt'
-
-reformatted_examples_train = reformatExamples('../triviaqa/squad_format_for_triviaqa_qa_' + dataset + "-train")
-reformatted_examples_dev = reformatExamples('../triviaqa/squad_format_for_triviaqa_qa_' + dataset + "-dev")
 
 ################################################################
 
@@ -251,7 +240,6 @@ for chosen_learning_rate in learning_rate_choices:
 
 	execution_start = time.time()
 
-	print("Dataset: " + dataset)
 	print("Model: " + model_choice)
 	print("Dropout: " + str(current_dropout))
 	print("Frozen Choice: " + str(frozen_choice))
@@ -265,52 +253,15 @@ for chosen_learning_rate in learning_rate_choices:
 	print("Validation Set Choice: " + str(validation_set_scoring))
 	print("Number of Epochs: " + str(num_epochs))
 
-	if validation_set_scoring == True:
+	########################################################################
 
-	    training_df = pd.DataFrame(reformatted_examples_train)
-	    train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)
-	    train.reset_index(drop=True, inplace=True)
-	    validation.reset_index(drop=True, inplace=True)
+	triviaqa_dataset = load_from_disk("./triviaqa_dataset_preprocessed_v2")
+	triviaqa_dataset.set_format("torch")
 
-	    training_dataset_pandas = train#[:1000]
-	    training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
-	    training_dataset_arrow = Dataset(training_dataset_arrow)
+	model_choice = "distilbert-base-uncased"
+	tokenizer = AutoTokenizer.from_pretrained(model_choice)
 
-	    validation_dataset_pandas = validation#[:1000]
-	    validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
-	    validation_dataset_arrow = Dataset(validation_dataset_arrow)
-
-	    test_dataset_pandas = pd.DataFrame(reformatted_examples_dev)
-	    test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
-	    test_dataset_arrow = Dataset(test_dataset_arrow)
-
-	else:
-
-	    training_dataset_pandas = pd.DataFrame(reformatted_examples_train)#[:1000]
-	    training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
-	    training_dataset_arrow = Dataset(training_dataset_arrow)
-
-	    validation_dataset_pandas = pd.DataFrame(reformatted_examples_dev)#[:1000]
-	    validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
-	    validation_dataset_arrow = Dataset(validation_dataset_arrow)
-
-	    test_dataset_pandas = pd.DataFrame(reformatted_examples_test)
-	    test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
-	    test_dataset_arrow = Dataset(test_dataset_arrow)
-
-	########################################################
-
-	qa_dataset = DatasetDict({'train' : training_dataset_arrow, 
-	                          'validation': validation_dataset_arrow, 
-	                          'test' : test_dataset_arrow})
-	        
-	tokenized_datasets = qa_dataset.map(preprocess_function, batched=True)
-
-	########################################################
-
-	model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-uncased")
-
-	############################################################
+	########################################################################
 
 	micro_averages = []
 	macro_averages = []
@@ -322,14 +273,16 @@ for chosen_learning_rate in learning_rate_choices:
 
 	    print("Loading Model")
 
-	    train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
-	    validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
-	    eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
+	    train_dataloader = DataLoader(triviaqa_dataset['train'], batch_size=assigned_batch_size)
+	    validation_dataloader = DataLoader(triviaqa_dataset['validation'], batch_size=assigned_batch_size)
+	    eval_dataloader = DataLoader(triviaqa_dataset['test'], batch_size=assigned_batch_size)
 
 	    ############################################################
 
-	    model = CustomBERTModel(model_choice, current_dropout, frozen_choice, frozen_layers, 
-	    						average_hidden_state, frozen_embeddings)
+	    #model = CustomBERTModel(model_choice, current_dropout, frozen_choice, frozen_layers, 
+	    #						average_hidden_state, frozen_embeddings)
+
+	    model = AutoModelForQuestionAnswering.from_pretrained(model_choice)
 
 	    model.to(device)
 
@@ -341,7 +294,7 @@ for chosen_learning_rate in learning_rate_choices:
 	    num_training_steps = num_epochs * len(train_dataloader)
 
 	    lr_scheduler = get_scheduler(
-	        name="linear", optimizer=optimizer, num_warmup_steps=100, num_training_steps=num_training_steps
+	        name="linear", optimizer=optimizer, num_warmup_steps=warmup_steps_count, num_training_steps=num_training_steps
 	    )
 
 	    ############################################################
@@ -385,12 +338,12 @@ for chosen_learning_rate in learning_rate_choices:
 	        for batch in train_dataloader:
 
 	            #with torch.no_grad():
-	            
-	                #batch = {k: v.to(device) for k, v in batch.items()}
-	                labels = batch['labels'].to(device)
 
-	                new_batch = {'input_ids': batch['input_ids'].to(device), 
-	                			 'attention_mask': batch['attention_mask'].to(device)}
+	                new_batch = {'input_ids': batch['input_ids'].to(device),
+	                			 'attention_mask': batch['attention_mask'].to(device),
+	                			 'start_positions': batch['start_positions'].to(device),
+	                			 'end_positions': batch['end_positions'].to(device)}
+
 	                outputs = model(**new_batch)
 
 	                loss = outputs.loss
@@ -414,11 +367,10 @@ for chosen_learning_rate in learning_rate_choices:
 
 	            #with torch.no_grad():
 	            
-	                #batch = {k: v.to(device) for k, v in batch.items()}
-	                labels = batch['labels'].to(device)
-
-	                new_batch = {'input_ids': batch['input_ids'].to(device), 
-	                			 'attention_mask': batch['attention_mask'].to(device)}
+	                new_batch = {'input_ids': batch['input_ids'].to(device),
+	                			 'attention_mask': batch['attention_mask'].to(device),
+	                			 'start_positions': batch['start_positions'].to(device),
+	                			 'end_positions': batch['end_positions'].to(device)}
 	                outputs = model(**new_batch)
 
 	                loss = outputs.loss
@@ -471,8 +423,11 @@ for chosen_learning_rate in learning_rate_choices:
 	    metric = load_metric("accuracy")
 	    #model.eval()
 
-	    total_predictions = torch.FloatTensor([]).to(device)
-	    total_references = torch.FloatTensor([]).to(device)
+	    total_start_position_predictions = torch.FloatTensor([]).to(device)
+	    total_start_position_references = torch.FloatTensor([]).to(device)
+
+	    total_end_position_predictions = torch.FloatTensor([]).to(device)
+	    total_end_position_references = torch.FloatTensor([]).to(device)
 
 	    inference_start = time.time()
 
@@ -484,20 +439,27 @@ for chosen_learning_rate in learning_rate_choices:
 
 	        with torch.no_grad():
 
-	            #batch = {k: v.to(device) for k, v in batch.items()}
-	            labels = batch['labels'].to(device)
-
-	            new_batch = {'input_ids': batch['input_ids'].to(device), 
-	            			 'attention_mask': batch['attention_mask'].to(device)}
+	            new_batch = {'input_ids': batch['input_ids'].to(device),
+	                		 'attention_mask': batch['attention_mask'].to(device),
+	                		 'start_positions': batch['start_positions'].to(device),
+	                		 'end_positions': batch['end_positions'].to(device)}
 
 	            outputs = model(**new_batch)
 
-	            logits = outputs.logits
+	            print("outputs")
+	            print(outputs.keys())
+
+	            start_logits = outputs.start_logits
+	            end_logits = outputs.end_logits
+
 	            predictions = torch.argmax(logits, dim=-1)
 	            metric.add_batch(predictions=predictions, references=labels)
 
-	            total_predictions = torch.cat((total_predictions, predictions), 0)
-	            total_references = torch.cat((total_references, labels), 0)
+	            total_start_position_predictions = torch.cat((total_start_position_predictions, start_logits), 0)
+	            total_start_position_references = torch.cat((total_start_position_references, new_batch['start_positions']), 0)
+
+	            total_end_position_predictions = torch.cat((total_end_position_predictions, end_logits), 0)
+	            total_end_position_references = torch.cat((total_end_position_references, new_batch['end_positions']), 0)
 
 	            progress_bar.update(1)
 
