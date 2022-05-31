@@ -637,9 +637,9 @@ for chosen_learning_rate in learning_rate_choices:
             #print(new_total_references[:30])
 
             f_1_metric = load_metric("f1")
-            macro_f_1_results = f_1_metric.compute(average='macro', references=new_total_predictions, predictions=new_total_references)
+            macro_f_1_results = f_1_metric.compute(average='macro', references=new_total_references, predictions=new_total_predictions)
             print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
-            micro_f_1_results = f_1_metric.compute(average='micro', references=new_total_predictions, predictions=new_total_references)
+            micro_f_1_results = f_1_metric.compute(average='micro', references=new_total_references, predictions=new_total_predictions)
             print("Micro F1 for Test Set: " + str(micro_f_1_results['f1'] * 100))
 
             micro_averages.append(micro_f_1_results['f1'] * 100)

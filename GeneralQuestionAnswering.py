@@ -1,9 +1,10 @@
 
 import json
-from datasets import load_dataset, load_from_disk, DatasetDict, Dataset
-from transformers import DefaultDataCollator, AutoTokenizer
+from datasets import load_dataset, load_from_disk, DatasetDict, Dataset, load_metric
+from transformers import DefaultDataCollator, AutoTokenizer, get_scheduler, AutoModelForQuestionAnswering
 from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
 from tqdm import tqdm
+import torch.nn as nn
 
 from urllib.request import urlopen, Request
 from bs4 import BeautifulSoup
@@ -13,10 +14,15 @@ import pyarrow.dataset as ds
 import pandas as pd
 import numpy as np
 
+from torch.optim import Adam
+from torch.utils.data import DataLoader
+
 from sklearn.model_selection import train_test_split
 import random
 import torch
 import os
+import time
+import statistics
 
 ################################################################
 
@@ -28,70 +34,6 @@ torch.manual_seed(random_state)
 os.environ['PYTHONHASHSEED'] = str(random_state)
 
 ############################################################
-
-def preprocess_function(examples):
-	questions = [q.strip() for q in examples["question"]]
-	inputs = tokenizer(
-		questions,
-		examples["context"],
-		max_length=384,
-		truncation="only_second",
-		return_offsets_mapping=True,
-		padding="max_length",
-		)
-
-	offset_mapping = inputs.pop("offset_mapping")
-	answers = examples["answers"]
-	start_positions = []
-	end_positions = []
-
-	for i, offset in enumerate(offset_mapping):
-
-	    current_start_positions = []
-	    current_end_positions = []
-
-	    for j in range(0, len(answers[i]['text'])):
-
-	        answer = {'text': [answers[i]['text'][j]], "answer_start": [answers[i]['answer_start'][j]]}
-
-	        #answer = answers[i]
-	        start_char = answer["answer_start"][0]
-	        end_char = answer["answer_start"][0] + len(answer["text"][0])
-	        sequence_ids = inputs.sequence_ids(i)
-
-	        # Find the start and end of the context
-	        idx = 0
-	        while sequence_ids[idx] != 1:
-	            idx += 1
-	        context_start = idx
-	        while sequence_ids[idx] == 1:
-	            idx += 1
-	        context_end = idx - 1
-
-	        # If the answer is not fully inside the context, label it (0, 0)
-	        if offset[context_start][0] > end_char or offset[context_end][1] < start_char:
-	            current_start_positions.append(0)
-	            current_end_positions.append(0)
-	        else:
-	            # Otherwise it's the start and end token positions
-	            idx = context_start
-	            while idx <= context_end and offset[idx][0] <= start_char:
-	                idx += 1
-	            current_start_positions.append(idx - 1)
-
-	            idx = context_end
-	            while idx >= context_start and offset[idx][1] >= end_char:
-	                idx -= 1
-	            current_end_positions.append(idx + 1)
-
-	    start_positions.append(current_start_positions)
-	    end_positions.append(current_end_positions)
-
-	inputs["start_positions"] = start_positions
-	inputs["end_positions"] = end_positions
-	return inputs
-
-########################################################################
 
 def find_all(a_str, sub):
     start = 0
@@ -164,38 +106,353 @@ def reformat_trivia_qa(examples):
 
 ########################################################################
 
+device = "cuda:0"
+#device = "cpu"
+device = torch.device(device)
 
-triviaqa_dataset = load_dataset("trivia_qa", 'rc')
-squad = load_dataset('squad')
+num_epochs = 10 #1000 #10
+patience_value = 5 #10 #3
+current_dropout = True
+number_of_runs = 3 #1 #5
+frozen_choice = False
+#chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_embeddings = False
+average_hidden_state = False
+
+validation_set_scoring = False
+
+assigned_batch_size = 8
+gradient_accumulation_multiplier = 4
+
+validation_set_scoring = True
+
+############################################################
+
+warmup_steps_count = 2000
+#learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-5]
 
 model_choice = "distilbert-base-uncased"
+checkpoint_path = 'checkpoints/experiment_QA_793.pt'
+dataset_version = "./triviaqa_dataset_preprocessed_256_384_word_context_one_answer"
+
+triviaqa_dataset = load_from_disk(dataset_version)
+triviaqa_dataset.set_format("torch")
+
+################################################################
+
 tokenizer = AutoTokenizer.from_pretrained(model_choice)
 
-########################################################################
+################################################################
 
-triviaqa_dataset = triviaqa_dataset.map(reformat_trivia_qa, batched=True)
+learning_rate_to_results_dict = {}
 
-print("---------------------------------------------------------------------")
-print("Before: " + str(len(triviaqa_dataset['train'])))
-triviaqa_dataset['train'] = triviaqa_dataset['train'].filter(lambda x: x['context'] != "Error")
-triviaqa_dataset['validation'] = triviaqa_dataset['validation'].filter(lambda x: x['context'] != "Error")
-triviaqa_dataset['test'] = triviaqa_dataset['test'].filter(lambda x: x['context'] != "Error")
-print("After: " + str(len(triviaqa_dataset['train'])))
-print("---------------------------------------------------------------------")
+for chosen_learning_rate in learning_rate_choices:
 
-triviaqa_dataset = triviaqa_dataset.map(preprocess_function, batched=True, remove_columns=triviaqa_dataset["train"].column_names)
+	print("--------------------------------------------------------------------------")
+	print("Starting new learning rate: " + str(chosen_learning_rate))
+	print("--------------------------------------------------------------------------")
 
-########################################################################
+	execution_start = time.time()
 
-triviaqa_dataset.set_format("torch")
-triviaqa_dataset.save_to_disk("./triviaqa_dataset_preprocessed_v2")
+	print("Model: " + model_choice)
+	print("Dropout: " + str(current_dropout))
+	print("Frozen Choice: " + str(frozen_choice))
+	print("Number of Runs: " + str(number_of_runs))
+	print('Learning Rate: ' + str(chosen_learning_rate))
+	print("Checkpoint Path: " + checkpoint_path)
+	print("Number of Frozen Layers: " + str(frozen_layers))
+	print("Frozen Embeddings: " + str(frozen_embeddings))
+	print("Patience: " + str(patience_value))
+	print("Average Hidden Layers: " + str(average_hidden_state))
+	print("Validation Set Choice: " + str(validation_set_scoring))
+	print("Number of Epochs: " + str(num_epochs))
+	print("Number of Warmup Steps: " + str(warmup_steps_count))
+	print("Dataset Version: " + str(dataset_version))
+
+	########################################################################
+
+	model_choice = "distilbert-base-uncased"
+	tokenizer = AutoTokenizer.from_pretrained(model_choice)
+
+	########################################################################
+
+	micro_averages = []
+	macro_averages = []
+	inference_times = []
+
+	for i in range(0, number_of_runs):
+
+	    run_start = time.time()
+
+	    print("Loading Model")
+
+	    train_dataloader = DataLoader(triviaqa_dataset['train'], batch_size=assigned_batch_size)
+	    validation_dataloader = DataLoader(triviaqa_dataset['validation'], batch_size=assigned_batch_size)
+	    eval_dataloader = DataLoader(triviaqa_dataset['test'], batch_size=assigned_batch_size)
+
+	    print("Sizes of Training, Validation, and Test Sets")
+	    print(len(triviaqa_dataset['train']))
+	    print(len(triviaqa_dataset['validation']))
+	    print(len(triviaqa_dataset['test']))
+
+	    ############################################################
+
+	    #model = CustomBERTModel(model_choice, current_dropout, frozen_choice, frozen_layers, 
+	    #						average_hidden_state, frozen_embeddings)
+
+	    model = AutoModelForQuestionAnswering.from_pretrained(model_choice)
+
+	    model.to(device)
+
+	    ############################################################
+
+	    criterion = nn.CrossEntropyLoss()
+	    optimizer = Adam(model.parameters(), lr=chosen_learning_rate) #5e-6
+
+	    num_training_steps = num_epochs * len(train_dataloader)
+
+	    lr_scheduler = get_scheduler(
+	        name="linear", optimizer=optimizer, num_warmup_steps=warmup_steps_count, num_training_steps=num_training_steps
+	    )
+
+	    ############################################################
 
 
 
+	    # to track the training loss as the model trains
+	    train_losses = []
+	    # to track the validation loss as the model trains
+	    valid_losses = []
+	    # to track the average training loss per epoch as the model trains
+	    avg_train_losses = []
+	    # to track the average validation loss per epoch as the model trains
+	    avg_valid_losses = []
+
+
+	    # import EarlyStopping
+	    from pytorchtools import EarlyStopping
+	    # initialize the early_stopping object
+	    early_stopping = EarlyStopping(patience=patience_value, verbose=True, path=checkpoint_path)
+	    #early_stopping = EarlyStopping(patience=10, verbose=True)
+
+	    print("Checkpoint Path: " + checkpoint_path)
+
+
+	    print("Beginning Training")
+
+	    total_epochs_performed = 0
+
+	    for epoch in range(num_epochs):
+
+	        total_epochs_performed += 1
+
+	        print("Current Epoch: " + str(epoch))
+
+	        progress_bar = tqdm(range(len(train_dataloader)))
+
+	        gradient_accumulation_count = 0
+
+	        model.train()
+	        for batch in train_dataloader:
+
+	            #with torch.no_grad():
+
+	                #dummy_start_positions = torch.Tensor([[0, 5],[0, 5],[0, 5],[0, 5],[0, 5],[0, 5],[0, 5],[0, 5]]).to(device)
+	                #dummy_end_positions = torch.Tensor([[0, 5],[0, 5],[0, 5],[0, 5],[0, 5],[0, 5],[0, 5],[0, 5]]).to(device)
+
+	                new_batch = {'input_ids': batch['input_ids'].to(device),
+	                			 'attention_mask': batch['attention_mask'].to(device),
+	                			 'start_positions': batch['start_positions'].to(device),
+	                			 'end_positions': batch['end_positions'].to(device)}
+
+	                outputs = model(**new_batch)
+
+	                #print("model outputs")
+	                #print(outputs.keys())
+	                #print(outputs)
+
+	                #print("Batch Shapes")
+	                #print(new_batch['start_positions'])
+	                #print(new_batch['end_positions'])
+
+	                loss = outputs.loss
+
+	                loss.backward()
+
+	                gradient_accumulation_count += 1
+	                if gradient_accumulation_count % (gradient_accumulation_multiplier) == 0:
+	                    optimizer.step()
+	                    lr_scheduler.step()
+	                    optimizer.zero_grad()
+	                
+	                progress_bar.update(1)
+	                train_losses.append(loss.item())
+
+
+	        progress_bar = tqdm(range(len(validation_dataloader)))
+
+	        model.eval()
+	        for batch in validation_dataloader:
+
+	            #with torch.no_grad():
+	            
+	                new_batch = {'input_ids': batch['input_ids'].to(device),
+	                			 'attention_mask': batch['attention_mask'].to(device),
+	                			 'start_positions': batch['start_positions'].to(device),
+	                			 'end_positions': batch['end_positions'].to(device)}
+	                outputs = model(**new_batch)
+
+	                loss = outputs.loss
+	                progress_bar.update(1)
+
+	                valid_losses.append(loss.item())
+
+
+	        # print training/validation statistics 
+	        # calculate average loss over an epoch
+	        train_loss = np.average(train_losses)
+	        valid_loss = np.average(valid_losses)
+	        avg_train_losses.append(train_loss)
+	        avg_valid_losses.append(valid_loss)
+	        
+	        epoch_len = len(str(num_epochs))
+	        
+	        print_msg = (f'[{epoch:>{epoch_len}}/{num_epochs:>{epoch_len}}] ' +
+	                     f'train_loss: {train_loss:.5f} ' +
+	                     f'valid_loss: {valid_loss:.5f}')
+	        
+	        print(print_msg)
+	        
+	        # clear lists to track next epoch
+	        train_losses = []
+	        valid_losses = []
+	        
+	        # early_stopping needs the validation loss to check if it has decresed, 
+	        # and if it has, it will make a checkpoint of the current model
+	        early_stopping(valid_loss, model)
+	        
+	        if early_stopping.early_stop:
+	            print("Early stopping")
+	            break
 
 
 
+	    ############################################################
 
+	    print("Loading the Best Model")
+
+	    model.load_state_dict(torch.load(checkpoint_path))
+
+
+
+	    ############################################################
+
+	    print("Beginning Evaluation")
+
+	    metric = load_metric("accuracy")
+	    #model.eval()
+
+	    total_start_position_predictions = torch.FloatTensor([]).to(device)
+	    total_start_position_references = torch.FloatTensor([]).to(device)
+
+	    total_end_position_predictions = torch.FloatTensor([]).to(device)
+	    total_end_position_references = torch.FloatTensor([]).to(device)
+
+	    inference_start = time.time()
+
+	    #progress_bar = tqdm(range(len(eval_dataloader)))
+	    #for batch in eval_dataloader:
+
+	    progress_bar = tqdm(range(len(eval_dataloader)))
+	    for batch in eval_dataloader:
+
+	        with torch.no_grad():
+
+	            new_batch = {'input_ids': batch['input_ids'].to(device),
+	                		 'attention_mask': batch['attention_mask'].to(device),
+	                		 'start_positions': batch['start_positions'].to(device),
+	                		 'end_positions': batch['end_positions'].to(device)}
+
+	            outputs = model(**new_batch)
+
+	            start_logits = outputs.start_logits
+	            end_logits = outputs.end_logits
+
+	            start_predictions = torch.argmax(start_logits, dim=-1)
+	            end_predictions = torch.argmax(end_logits, dim=-1)
+
+	            #print("start_predictions")
+	            #print(start_predictions)
+	            #print("end_predictions")
+	            #print(end_predictions)
+
+	            total_start_position_predictions = torch.cat((total_start_position_predictions, start_predictions), 0)
+	            total_start_position_references = torch.cat((total_start_position_references, new_batch['start_positions']), 0)
+
+	            total_end_position_predictions = torch.cat((total_end_position_predictions, end_predictions), 0)
+	            total_end_position_references = torch.cat((total_end_position_references, new_batch['end_positions']), 0)
+
+	            progress_bar.update(1)
+
+
+
+	    inference_end = time.time()
+	    total_inference_time = inference_end - inference_start
+	    inference_times.append(total_inference_time)
+
+	    ############################################################
+
+	    print("--------------------------")
+	    print("Predictions Shapes")
+	    print(total_start_position_predictions.shape)
+	    print(total_start_position_references.shape)
+	    print(total_end_position_predictions.shape)
+	    print(total_end_position_references.shape)
+
+	    results = metric.compute(references=total_start_position_references, predictions=total_start_position_predictions)
+	    print("Accuracy for Test Set: " + str(results['accuracy']))
+
+	    f_1_metric = load_metric("f1")
+	    macro_f_1_results = f_1_metric.compute(average='macro', references=total_start_position_references, predictions=total_start_position_predictions)
+	    print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
+	    micro_f_1_results = f_1_metric.compute(average='micro', references=total_start_position_references, predictions=total_start_position_predictions)
+	    print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']  * 100))
+
+	    micro_averages.append(micro_f_1_results['f1'] * 100)
+	    macro_averages.append(macro_f_1_results['f1'] * 100)
+
+
+	print("Processing " + dataset_version + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
+	print('micro_averages: ' + str(micro_averages))
+	print("Micro F1 Average: " + str(statistics.mean(micro_averages)))
+	if len(micro_averages) > 1:
+	    print("Micro F1 Standard Variation: " + str(statistics.stdev(micro_averages)))
+
+	print('macro_averages: ' + str(macro_averages))
+	print("Macro F1 Average: " + str(statistics.mean(macro_averages)))
+	if len(macro_averages) > 1:
+	    print("Macro F1 Standard Variation: " + str(statistics.stdev(macro_averages)))
+
+	print("Inference Time Average: " + str(statistics.mean(inference_times)))
+	print("Dataset Execution Run Time: " + str((time.time() - execution_start) / number_of_runs))
+	print("Epoch Average Time: " + str((time.time() - run_start) / total_epochs_performed))
+
+	
+
+	############################################################
+
+	current_learning_rate_results[dataset + "_micro_f1_average"] =  statistics.mean(micro_averages)
+	if len(micro_averages) > 1:
+	    current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages)
+	current_learning_rate_results[dataset + "_macro_f1_average"] =  statistics.mean(macro_averages)
+	if len(macro_averages) > 1:
+	    current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages)
+
+	############################################################
+
+learning_rate_to_results_dict[str(chosen_learning_rate)] = current_learning_rate_results
 
 
 

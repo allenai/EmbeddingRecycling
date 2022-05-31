@@ -83,7 +83,7 @@ gradient_accumulation_multiplier = 4
 #learning_rate_choices = [0.001, 0.005, 0.0001, 0.0005, 1e-5, 5e-5] #1e-5
 #learning_rate_choices = [0.001, 0.003, 0.0002]
 
-learning_rate_choices = [5e-6]
+learning_rate_choices = [5e-5]
 
 ############################################################
 
@@ -93,7 +93,7 @@ bottleneck_value = 256
 model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 
-checkpoint_path = 'checkpoints/experiment9_checkpoint2866.pt'
+checkpoint_path = 'checkpoints/experiment9_checkpoint2966.pt'
 
 use_all_adapter = False
 
@@ -482,13 +482,13 @@ for chosen_learning_rate in learning_rate_choices:
 	        print(total_predictions.shape)
 	        print(total_references.shape)
 
-	        results = metric.compute(references=total_predictions, predictions=total_references)
+	        results = metric.compute(references=total_references, predictions=total_predictions)
 	        print("Accuracy for Test Set: " + str(results['accuracy']))
 
 	        f_1_metric = load_metric("f1")
-	        macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
+	        macro_f_1_results = f_1_metric.compute(average='macro', references=total_references, predictions=total_predictions)
 	        print("Macro F1 for Test Set: " + str(macro_f_1_results['f1']))
-	        micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
+	        micro_f_1_results = f_1_metric.compute(average='micro', references=total_references, predictions=total_predictions)
 	        print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']))
 
 	        micro_averages.append(micro_f_1_results['f1'])

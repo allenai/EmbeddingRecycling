@@ -62,7 +62,7 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sciie-relation-extraction']
 #classification_datasets = ['mag']
 
-num_epochs = 1000 #1000 #10
+num_epochs = 100 #1000 #10
 patience_value = 10 #10 #3
 current_dropout = True
 number_of_runs = 10 #1 #5
@@ -496,13 +496,13 @@ for chosen_learning_rate, bottleneck_value, dataset in zip(chosen_learning_rate_
 	        print(total_predictions.shape)
 	        print(total_references.shape)
 
-	        results = metric.compute(references=total_predictions, predictions=total_references)
+	        results = metric.compute(references=total_references, predictions=total_predictions)
 	        print("Accuracy for Test Set: " + str(results['accuracy']))
 
 	        f_1_metric = load_metric("f1")
-	        macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
+	        macro_f_1_results = f_1_metric.compute(average='macro', references=total_references, predictions=total_predictions)
 	        print("Macro F1 for Test Set: " + str(macro_f_1_results['f1']))
-	        micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
+	        micro_f_1_results = f_1_metric.compute(average='micro', references=total_references, predictions=total_predictions)
 	        print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']))
 
 	        micro_averages.append(micro_f_1_results['f1'])

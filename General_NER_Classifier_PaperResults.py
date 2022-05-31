@@ -182,7 +182,7 @@ gradient_accumulation_multiplier = 4
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 
-learning_rate_for_each_dataset = [5e-5, 5e-6, 5e-5]
+learning_rate_for_each_dataset = [1e-4, 1e-5, 5e-5]
 
 ############################################################
 
@@ -195,11 +195,11 @@ learning_rate_for_each_dataset = [5e-5, 5e-6, 5e-5]
 #model_choice = "distilbert-base-uncased"
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
-
-#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
+
+model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
 
 ############################################################
 

@@ -693,13 +693,13 @@ for chosen_learning_rate, dataset in zip(selected_learning_rate_choices, classif
             print(total_predictions.shape)
             print(total_references.shape)
 
-            results = metric.compute(references=total_predictions, predictions=total_references)
+            results = metric.compute(references=total_references, predictions=total_predictions)
             print("Accuracy for Test Set: " + str(results['accuracy']))
 
             f_1_metric = load_metric("f1")
-            macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
+            macro_f_1_results = f_1_metric.compute(average='macro', references=total_references, predictions=total_predictions)
             print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
-            micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
+            micro_f_1_results = f_1_metric.compute(average='micro', references=total_references, predictions=total_predictions)
             print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']  * 100))
 
             micro_averages.append(micro_f_1_results['f1'] * 100)

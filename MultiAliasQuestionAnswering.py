@@ -1,4 +1,5 @@
 
+
 import json
 from datasets import load_dataset, load_from_disk, DatasetDict, Dataset, load_metric
 from transformers import DefaultDataCollator, AutoTokenizer, get_scheduler, AutoModelForQuestionAnswering
@@ -22,6 +23,7 @@ import random
 import torch
 import os
 import time
+import statistics
 
 ################################################################
 
@@ -103,7 +105,7 @@ def reformat_trivia_qa(examples):
 	return inputs
 
 
-########################################################################
+############################################################
 
 class CustomBERTModel(nn.Module):
     def __init__(self, model_choice, dropout_layer, frozen, 
@@ -115,6 +117,12 @@ class CustomBERTModel(nn.Module):
 
             model_encoding = AutoModelForQuestionAnswering.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
+            self.encoderModel = model_encoding
+
+          elif model_choice == 'distilbert-base-uncased':
+
+            model_encoding = AutoModelForQuestionAnswering.from_pretrained(model_choice, output_hidden_states=True)
+            embedding_size = 768
             self.encoderModel = model_encoding
 
           else:
@@ -148,25 +156,12 @@ class CustomBERTModel(nn.Module):
 
             else:
 
-                if model_choice == "distilbert-base-uncased":
+                print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
 
-                    print("Number of Layers: " + str(len(list(self.encoderModel.distilbert.transformer.layer))))
-
-                    layers_to_freeze = self.encoderModel.distilbert.transformer.layer[:frozen_layer_count]
-                    for module in layers_to_freeze:
-                        for param in module.parameters():
-                            param.requires_grad = False
-
-                else:
-
-                    print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
-
-                    layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
-                    for module in layers_to_freeze:
-                        for param in module.parameters():
-                            param.requires_grad = False
-
-
+                layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
+                for module in layers_to_freeze:
+                    for param in module.parameters():
+                        param.requires_grad = False
 
           
           if frozen_embeddings == True:
@@ -184,15 +179,52 @@ class CustomBERTModel(nn.Module):
 
           
 
-    def forward(self, input_ids, attention_mask):
+    def forward(self, input_ids, attention_mask, start_positions, end_positions):
 
-        model_output = self.encoderModel(input_ids, attention_mask)
+          model_output = self.encoderModel(input_ids=input_ids, 
+          								   attention_mask=attention_mask)
 
-        return model_output
+          #return model_output
 
+          start_predictions = torch.argmax(model_output.start_logits, dim=-1)
+          end_predictions = torch.argmax(model_output.end_logits, dim=-1)
 
+          ###############################################
 
-############################################################
+          chosen_reference_start_positions = []
+          chosen_reference_end_positions = []
+
+          for i in range(0, len(start_predictions)):
+          	if start_predictions[i] in start_positions[i]:
+          		chosen_reference_start_positions.append(start_predictions[i])
+          		chosen_reference_end_positions.append(end_predictions[i])
+          	else:
+          		chosen_reference_start_positions.append(start_positions[i][0])
+          		chosen_reference_end_positions.append(end_positions[i][0])
+
+          chosen_reference_start_positions = torch.LongTensor(chosen_reference_start_positions).to(device)
+          chosen_reference_end_positions = torch.LongTensor(chosen_reference_end_positions).to(device)
+
+          ###############################################
+
+          return {'start_logits': model_output.start_logits,
+          		  'end_logits': model_output.end_logits, 
+          		  'start_positions': chosen_reference_start_positions,
+          		  'end_positions': chosen_reference_end_positions}
+
+          #print("Hidden states")
+          #print(len(model_output['hidden_states']))
+          #print(model_output.keys())
+          #print(self.encoderModel.__dict__)
+          #print(model_output['hidden_states'][6].shape)
+          #print("start_logits")
+          #print(start_logits)
+          #print("start_positions")
+          #print(start_positions)
+
+          #return model_output
+
+########################################################################
 
 device = "cuda:0"
 #device = "cpu"
@@ -213,16 +245,20 @@ validation_set_scoring = False
 assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
 
-learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
-
 validation_set_scoring = True
 
 ############################################################
 
-warmup_steps_count = 500
+warmup_steps_count = 2000
+#learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-5]
 
 model_choice = "distilbert-base-uncased"
-checkpoint_path = 'checkpoints/experiment10_768.pt'
+checkpoint_path = 'checkpoints/experiment_QA_888.pt'
+dataset_version = "./triviaqa_dataset_preprocessed_256_512_word_context_multiple_aliases"
+
+triviaqa_dataset = load_from_disk(dataset_version)
+triviaqa_dataset.set_format("torch")
 
 ################################################################
 
@@ -252,11 +288,10 @@ for chosen_learning_rate in learning_rate_choices:
 	print("Average Hidden Layers: " + str(average_hidden_state))
 	print("Validation Set Choice: " + str(validation_set_scoring))
 	print("Number of Epochs: " + str(num_epochs))
+	print("Number of Warmup Steps: " + str(warmup_steps_count))
+	print("Dataset Version: " + str(dataset_version))
 
 	########################################################################
-
-	triviaqa_dataset = load_from_disk("./triviaqa_dataset_preprocessed_v2")
-	triviaqa_dataset.set_format("torch")
 
 	model_choice = "distilbert-base-uncased"
 	tokenizer = AutoTokenizer.from_pretrained(model_choice)
@@ -277,12 +312,17 @@ for chosen_learning_rate in learning_rate_choices:
 	    validation_dataloader = DataLoader(triviaqa_dataset['validation'], batch_size=assigned_batch_size)
 	    eval_dataloader = DataLoader(triviaqa_dataset['test'], batch_size=assigned_batch_size)
 
+	    print("Sizes of Training, Validation, and Test Sets")
+	    print(len(triviaqa_dataset['train']))
+	    print(len(triviaqa_dataset['validation']))
+	    print(len(triviaqa_dataset['test']))
+
 	    ############################################################
 
-	    #model = CustomBERTModel(model_choice, current_dropout, frozen_choice, frozen_layers, 
-	    #						average_hidden_state, frozen_embeddings)
+	    model = CustomBERTModel(model_choice, current_dropout, frozen_choice, frozen_layers, 
+	    							  average_hidden_state, frozen_embeddings)
 
-	    model = AutoModelForQuestionAnswering.from_pretrained(model_choice)
+	    #model = AutoModelForQuestionAnswering.from_pretrained(model_choice)
 
 	    model.to(device)
 
@@ -339,6 +379,9 @@ for chosen_learning_rate in learning_rate_choices:
 
 	            #with torch.no_grad():
 
+	                #dummy_start_positions = torch.Tensor([[0, 5],[0, 5],[0, 5],[0, 5],[0, 5],[0, 5],[0, 5],[0, 5]]).to(device)
+	                #dummy_end_positions = torch.Tensor([[0, 5],[0, 5],[0, 5],[0, 5],[0, 5],[0, 5],[0, 5],[0, 5]]).to(device)
+
 	                new_batch = {'input_ids': batch['input_ids'].to(device),
 	                			 'attention_mask': batch['attention_mask'].to(device),
 	                			 'start_positions': batch['start_positions'].to(device),
@@ -346,7 +389,7 @@ for chosen_learning_rate in learning_rate_choices:
 
 	                outputs = model(**new_batch)
 
-	                loss = outputs.loss
+	                loss = criterion(outputs['start_logits'], outputs['start_positions'])
 
 	                loss.backward()
 
@@ -373,7 +416,7 @@ for chosen_learning_rate in learning_rate_choices:
 	                			 'end_positions': batch['end_positions'].to(device)}
 	                outputs = model(**new_batch)
 
-	                loss = outputs.loss
+	                loss = criterion(outputs['start_logits'], outputs['start_positions'])
 	                progress_bar.update(1)
 
 	                valid_losses.append(loss.item())
@@ -446,20 +489,22 @@ for chosen_learning_rate in learning_rate_choices:
 
 	            outputs = model(**new_batch)
 
-	            print("outputs")
-	            print(outputs.keys())
+	            start_logits = outputs['start_logits']
+	            end_logits = outputs['end_logits']
 
-	            start_logits = outputs.start_logits
-	            end_logits = outputs.end_logits
+	            start_predictions = torch.argmax(start_logits, dim=-1)
+	            end_predictions = torch.argmax(end_logits, dim=-1)
 
-	            predictions = torch.argmax(logits, dim=-1)
-	            metric.add_batch(predictions=predictions, references=labels)
+	            #print("start_predictions")
+	            #print(start_predictions)
+	            #print("end_predictions")
+	            #print(end_predictions)
 
-	            total_start_position_predictions = torch.cat((total_start_position_predictions, start_logits), 0)
-	            total_start_position_references = torch.cat((total_start_position_references, new_batch['start_positions']), 0)
+	            total_start_position_predictions = torch.cat((total_start_position_predictions, start_predictions), 0)
+	            total_start_position_references = torch.cat((total_start_position_references, outputs['start_positions']), 0)
 
-	            total_end_position_predictions = torch.cat((total_end_position_predictions, end_logits), 0)
-	            total_end_position_references = torch.cat((total_end_position_references, new_batch['end_positions']), 0)
+	            total_end_position_predictions = torch.cat((total_end_position_predictions, end_predictions), 0)
+	            total_end_position_references = torch.cat((total_end_position_references, outputs['end_positions']), 0)
 
 	            progress_bar.update(1)
 
@@ -473,23 +518,25 @@ for chosen_learning_rate in learning_rate_choices:
 
 	    print("--------------------------")
 	    print("Predictions Shapes")
-	    print(total_predictions.shape)
-	    print(total_references.shape)
+	    print(total_start_position_predictions.shape)
+	    print(total_start_position_references.shape)
+	    print(total_end_position_predictions.shape)
+	    print(total_end_position_references.shape)
 
-	    results = metric.compute(references=total_predictions, predictions=total_references)
+	    results = metric.compute(references=total_start_position_references, predictions=total_start_position_predictions)
 	    print("Accuracy for Test Set: " + str(results['accuracy']))
 
 	    f_1_metric = load_metric("f1")
-	    macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
+	    macro_f_1_results = f_1_metric.compute(average='macro', references=total_start_position_references, predictions=total_start_position_predictions)
 	    print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
-	    micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
+	    micro_f_1_results = f_1_metric.compute(average='micro', references=total_start_position_references, predictions=total_start_position_predictions)
 	    print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']  * 100))
 
 	    micro_averages.append(micro_f_1_results['f1'] * 100)
 	    macro_averages.append(macro_f_1_results['f1'] * 100)
 
 
-	print("Processing " + dataset + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
+	print("Processing " + dataset_version + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
 	print('micro_averages: ' + str(micro_averages))
 	print("Micro F1 Average: " + str(statistics.mean(micro_averages)))
 	if len(micro_averages) > 1:
@@ -518,7 +565,4 @@ for chosen_learning_rate in learning_rate_choices:
 	############################################################
 
 learning_rate_to_results_dict[str(chosen_learning_rate)] = current_learning_rate_results
-
-
-
 

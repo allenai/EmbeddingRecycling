@@ -201,7 +201,7 @@ device = torch.device(device)
 
 classification_datasets = ['chemprot', 'sci-cite', "sciie-relation-extraction"] #["sciie-relation-extraction", "mag"]
 
-num_epochs = 1000 #1000 #10
+num_epochs = 1 #1000 #10
 patience_value = 10 #10 #3
 current_dropout = True
 number_of_runs = 3 #1 #5
@@ -520,6 +520,10 @@ for chosen_learning_rate in learning_rate_choices:
                         new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
                         outputs = model(**new_batch)
 
+                        #print("Example outputs")
+                        #print(outputs)
+                        #print(labels)
+
                         loss = criterion(outputs, labels)
 
                         loss.backward()
@@ -641,13 +645,13 @@ for chosen_learning_rate in learning_rate_choices:
             print(total_predictions.shape)
             print(total_references.shape)
 
-            results = metric.compute(references=total_predictions, predictions=total_references)
+            results = metric.compute(references=total_references, predictions=total_predictions)
             print("Accuracy for Test Set: " + str(results['accuracy']))
 
             f_1_metric = load_metric("f1")
-            macro_f_1_results = f_1_metric.compute(average='macro', references=total_predictions, predictions=total_references)
+            macro_f_1_results = f_1_metric.compute(average='macro', references=total_references, predictions=total_predictions)
             print("Macro F1 for Test Set: " + str(macro_f_1_results['f1'] * 100))
-            micro_f_1_results = f_1_metric.compute(average='micro', references=total_predictions, predictions=total_references)
+            micro_f_1_results = f_1_metric.compute(average='micro', references=total_references, predictions=total_predictions)
             print("Micro F1 for Test Set: " + str(micro_f_1_results['f1']  * 100))
 
             micro_averages.append(micro_f_1_results['f1'] * 100)
