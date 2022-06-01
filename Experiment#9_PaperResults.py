@@ -80,11 +80,11 @@ gradient_accumulation_multiplier = 4
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 
-chosen_learning_rate_choices = [1e-4, 2e-4, 2e-4]
+chosen_learning_rate_choices = [0.001, 2e-05, 2e-4]
 chosen_bottleneck_values = [256, 64, 256]
 
-model_choice = 'roberta-large'
-#model_choice = 'allenai/scibert_scivocab_uncased'
+#model_choice = 'roberta-large'
+model_choice = 'allenai/scibert_scivocab_uncased'
 
 use_all_adapter = False
 

@@ -346,7 +346,7 @@ validation_set_scoring = True
 
 #learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]#[0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
 #learning_rate_choices = [0.001, 0.003, 0.0002]
-learning_rate_choices = [2e-5, 5e-5, 5e-6]
+learning_rate_choices = [5e-6]
 
 ########################################################################################
 
@@ -358,7 +358,7 @@ number_of_warmup_steps = 100
 model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 
-checkpoint_path = 'checkpoints/experiment9_ner_1911.pt'
+checkpoint_path = 'checkpoints/experiment9_ner_2011.pt'
 assigned_batch_size = 32
 tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 

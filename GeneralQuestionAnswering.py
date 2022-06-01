@@ -7,7 +7,6 @@ from tqdm import tqdm
 import torch.nn as nn
 
 from urllib.request import urlopen, Request
-from bs4 import BeautifulSoup
 
 import pyarrow as pa
 import pyarrow.dataset as ds
@@ -35,85 +34,14 @@ os.environ['PYTHONHASHSEED'] = str(random_state)
 
 ############################################################
 
-def find_all(a_str, sub):
-    start = 0
-    while True:
-        start = a_str.find(sub, start)
-        if start == -1: return
-        yield start
-        start += len(sub) # use start += 1 to find overlapping matches
-
-def findIndexesOfAnswers(substring_list, context):
-
-	found_aliases = []
-	indices = []
-
-	for substring in substring_list:
-		
-		currentIndices = list(find_all(context, substring))
-
-		for currentIndex in currentIndices:
-			if currentIndex >= 0:
-				found_aliases.append(substring)
-				indices.append(currentIndex)
-
-	return found_aliases, indices
-
-########################################################################
-
-def reformat_trivia_qa(examples):
-
-	ids = []
-	titles = []
-	contexts = []
-	questions = []
-	answers = []
-
-	for i in range(0, len(examples['question_id'])):
-
-		current_context = (" ").join(examples['search_results'][i]['search_context'])
-
-		if len(current_context) == 0:
-			#print("Error!")
-			current_context = (" ").join(examples['entity_pages'][i]['wiki_context'])
-			if len(current_context) == 0:
-				print("Major Error!")
-
-		current_text, current_found_answers = findIndexesOfAnswers(examples['answer'][i]['aliases'], current_context)
-		current_answers = {'text': current_text, 'answer_start': current_found_answers}
-
-		if len(current_text) == 0:
-			current_context = "Error"
-
-		ids.append(examples['question_id'][i])
-		titles.append("")
-		contexts.append(current_context)
-		questions.append(examples['question'][i])
-		answers.append(current_answers)
-
-	#################################################
-
-	inputs = {
-		'id': ids,
-		'title': titles,
-		'context': contexts,
-		'question': questions,
-		'answers': answers
-	}
-
-	return inputs
-
-
-########################################################################
-
 device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-num_epochs = 10 #1000 #10
+num_epochs = 2 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 3 #1 #5
+number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
@@ -133,20 +61,21 @@ warmup_steps_count = 2000
 #learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
 learning_rate_choices = [1e-5]
 
-model_choice = "distilbert-base-uncased"
-checkpoint_path = 'checkpoints/experiment_QA_793.pt'
-dataset_version = "./triviaqa_dataset_preprocessed_256_384_word_context_one_answer"
+model_choice = 'roberta-large' #'roberta-large'#'allenai/scibert_scivocab_uncased'#'roberta-large'#"distilbert-base-uncased"
+checkpoint_path = 'checkpoints/experiment_QA_806.pt'
+
+chosen_dataset = 'trivia_qa'
+context_cutoff_count = 512
+context_token_count = 512
+multi_answer = False
+
+dataset_version = "./" + chosen_dataset + "_dataset_" + model_choice + "_" + str(context_cutoff_count) + "_" + str(context_token_count)
+dataset_version += "_" + str(multi_answer)
 
 triviaqa_dataset = load_from_disk(dataset_version)
 triviaqa_dataset.set_format("torch")
 
 ################################################################
-
-tokenizer = AutoTokenizer.from_pretrained(model_choice)
-
-################################################################
-
-learning_rate_to_results_dict = {}
 
 for chosen_learning_rate in learning_rate_choices:
 
@@ -170,11 +99,6 @@ for chosen_learning_rate in learning_rate_choices:
 	print("Number of Epochs: " + str(num_epochs))
 	print("Number of Warmup Steps: " + str(warmup_steps_count))
 	print("Dataset Version: " + str(dataset_version))
-
-	########################################################################
-
-	model_choice = "distilbert-base-uncased"
-	tokenizer = AutoTokenizer.from_pretrained(model_choice)
 
 	########################################################################
 
@@ -442,17 +366,6 @@ for chosen_learning_rate in learning_rate_choices:
 	
 
 	############################################################
-
-	current_learning_rate_results[dataset + "_micro_f1_average"] =  statistics.mean(micro_averages)
-	if len(micro_averages) > 1:
-	    current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages)
-	current_learning_rate_results[dataset + "_macro_f1_average"] =  statistics.mean(macro_averages)
-	if len(macro_averages) > 1:
-	    current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages)
-
-	############################################################
-
-learning_rate_to_results_dict[str(chosen_learning_rate)] = current_learning_rate_results
 
 
 

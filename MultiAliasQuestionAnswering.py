@@ -266,8 +266,6 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice)
 
 ################################################################
 
-learning_rate_to_results_dict = {}
-
 for chosen_learning_rate in learning_rate_choices:
 
 	print("--------------------------------------------------------------------------")
@@ -554,15 +552,4 @@ for chosen_learning_rate in learning_rate_choices:
 	
 
 	############################################################
-
-	current_learning_rate_results[dataset + "_micro_f1_average"] =  statistics.mean(micro_averages)
-	if len(micro_averages) > 1:
-	    current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages)
-	current_learning_rate_results[dataset + "_macro_f1_average"] =  statistics.mean(macro_averages)
-	if len(macro_averages) > 1:
-	    current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages)
-
-	############################################################
-
-learning_rate_to_results_dict[str(chosen_learning_rate)] = current_learning_rate_results
 
