@@ -71,7 +71,7 @@ frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 
-validation_set_scoring = True
+validation_set_scoring = False
 
 assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
@@ -80,11 +80,11 @@ gradient_accumulation_multiplier = 4
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 
-chosen_learning_rate_choices = [0.001, 2e-05, 2e-4]
-chosen_bottleneck_values = [256, 64, 256]
+chosen_learning_rate_choices = [1e-4]
+chosen_bottleneck_values = [256]
 
-#model_choice = 'roberta-large'
-model_choice = 'allenai/scibert_scivocab_uncased'
+model_choice = 'roberta-large'
+#model_choice = 'allenai/scibert_scivocab_uncased'
 
 use_all_adapter = False
 
@@ -234,22 +234,17 @@ for chosen_learning_rate, bottleneck_value, dataset in zip(chosen_learning_rate_
 
 	    if validation_set_scoring == True:
 
-	        training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
-	        train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)
-	        train.reset_index(drop=True, inplace=True)
-	        validation.reset_index(drop=True, inplace=True)
+	        training_dataset_pandas = pd.DataFrame({'ner_tags': train_set_label, 'tokens': train_set_text})#[:1000]
+            training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
+            training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
 
-	        training_dataset_pandas = train#[:1000]
-	        training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
-	        training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+            validation_dataset_pandas = pd.DataFrame({'ner_tags': dev_set_label, 'tokens': dev_set_text})#[:1000]
+            validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
+            validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 
-	        validation_dataset_pandas = validation#[:1000]
-	        validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
-	        validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
-
-	        test_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})
-	        test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
-	        test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
+            test_dataset_pandas = pd.DataFrame({'ner_tags': dev_set_label, 'tokens': dev_set_text})
+            test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
+            test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
 
 	    else:
 

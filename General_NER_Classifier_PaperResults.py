@@ -346,16 +346,11 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
 
         if validation_set_scoring == True:
 
-            training_df = pd.DataFrame({'ner_tags': train_set_label, 'tokens': train_set_text})
-            train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)
-            train.reset_index(drop=True, inplace=True)
-            validation.reset_index(drop=True, inplace=True)
-
-            training_dataset_pandas = train#[:1000]
+            training_dataset_pandas = pd.DataFrame({'ner_tags': train_set_label, 'tokens': train_set_text})#[:1000]
             training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
             training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
 
-            validation_dataset_pandas = validation#[:1000]
+            validation_dataset_pandas = pd.DataFrame({'ner_tags': dev_set_label, 'tokens': dev_set_text})#[:1000]
             validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
             validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 

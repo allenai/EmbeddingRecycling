@@ -201,14 +201,14 @@ device = torch.device(device)
 
 classification_datasets = ['chemprot', 'sci-cite', "sciie-relation-extraction"] #["sciie-relation-extraction", "mag"]
 
-num_epochs = 1 #1000 #10
+num_epochs = 100 #1000 #10
 patience_value = 10 #10 #3
 current_dropout = True
 number_of_runs = 3 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
-frozen_embeddings = False
+frozen_layers = 6 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_embeddings = True
 average_hidden_state = False
 
 validation_set_scoring = True
@@ -217,7 +217,7 @@ gradient_accumulation_multiplier = 4
 
 
 #learning_rate_choices = [2e-5]
-learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6]
 #learning_rate_choices = [3e-5, 4e-5, 5e-5, 6e-5]
 
 ############################################################
@@ -228,8 +228,8 @@ learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
 #model_choice = 'bert-base-uncased'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+model_choice = 'allenai/scibert_scivocab_uncased'
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = 'roberta-large'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -252,8 +252,8 @@ learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-model_choice = "distilbert-base-uncased"
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+#model_choice = "distilbert-base-uncased"
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = "t5-small"
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -385,16 +385,11 @@ for chosen_learning_rate in learning_rate_choices:
 
         if validation_set_scoring == True:
 
-            training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
-            train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)
-            train.reset_index(drop=True, inplace=True)
-            validation.reset_index(drop=True, inplace=True)
-
-            training_dataset_pandas = train#[:1000]
+            training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
             training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
             training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
 
-            validation_dataset_pandas = validation#[:1000]
+            validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
             validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
             validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 

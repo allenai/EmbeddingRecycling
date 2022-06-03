@@ -1,4 +1,6 @@
 
+
+
 import json
 from datasets import load_dataset, load_from_disk, DatasetDict, Dataset, load_metric
 from transformers import DefaultDataCollator, AutoTokenizer, get_scheduler, AutoModelForQuestionAnswering
@@ -22,6 +24,128 @@ import torch
 import os
 import time
 import statistics
+
+############################################################
+
+class CustomBERTModel(nn.Module):
+    def __init__(self, number_of_labels, model_choice, dropout_layer, frozen, 
+                 frozen_layer_count, average_hidden_state, frozen_embeddings):
+
+          super(CustomBERTModel, self).__init__()
+          #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
+          if model_choice == "roberta-large":
+
+            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
+            embedding_size = 1024
+            self.encoderModel = model_encoding
+
+          elif model_choice == "nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large":
+
+            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
+            embedding_size = 384
+            self.encoderModel = model_encoding
+
+          else:
+
+            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
+            embedding_size = 768
+            self.encoderModel = model_encoding
+
+
+
+          if frozen == True:
+            print("Freezing the model parameters")
+            for param in self.encoderModel.parameters():
+                param.requires_grad = False
+
+
+
+          if frozen_layer_count > 0:
+
+            if model_choice == "distilbert-base-uncased":
+
+                #print(self.encoderModel.__dict__)
+                print("Number of Layers: " + str(len(list(self.encoderModel.transformer.layer))))
+
+                layers_to_freeze = self.encoderModel.transformer.layer[:frozen_layer_count]
+                for module in layers_to_freeze:
+                    for param in module.parameters():
+                        param.requires_grad = False
+
+            elif model_choice == 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large':
+
+                print("Number of Layers: " + str(len(list(self.encoderModel.roberta.encoder.layer))))
+
+                layers_to_freeze = self.encoderModel.roberta.encoder.layer[:frozen_layer_count]
+                for module in layers_to_freeze:
+                    for param in module.parameters():
+                        param.requires_grad = False
+
+            else:
+
+                print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
+
+                layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
+                for module in layers_to_freeze:
+                    for param in module.parameters():
+                        param.requires_grad = False
+
+
+
+          
+          if frozen_embeddings == True:
+            print("Frozen Embeddings Layer")
+            #print(self.encoderModel.__dict__)
+            if model_choice == 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large':
+                for param in self.encoderModel.roberta.embeddings.parameters():
+                    param.requires_grad = False
+
+            else:
+                for param in self.encoderModel.embeddings.parameters():
+                    param.requires_grad = False
+
+
+          
+
+
+          self.embedding_size = embedding_size
+          self.average_hidden_state = average_hidden_state
+
+          #print("automodel structure")
+          #other_model = AutoModelForTokenClassification.from_pretrained(model_choice, num_labels=number_of_labels, output_hidden_states=True)
+          #print(other_model.__dict__)
+
+          ############################################################################
+
+          if delta_model_choice == 'BitFit':
+                self.delta_model = BitFitModel(self.encoderModel)
+                self.delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
+                self.delta_model.log()
+          elif delta_model_choice == 'Adapter':
+                self.delta_model = AdapterModel(backbone_model=self.encoderModel, bottleneck_dim=bottleneck_value)
+                self.delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
+                self.delta_model.log()
+
+          self.dropout = nn.Dropout(p=0.1, inplace=False)
+          self.classifier = nn.Linear(in_features=embedding_size, out_features=number_of_labels, bias=True)
+
+          #self.encoderModel = self.encoderModel.roberta
+
+          
+          #print("encoderModel")
+          #print(self.encoderModel.__dict__)
+
+          self.encoderModel.classifier = None
+
+
+
+          
+
+    def forward(self, ids, mask):
+
+        last_hidden_state = self.encoderModel(ids, mask)['last_hidden_state']
+			
+        return last_hidden_state
 
 ##################################################
 
@@ -77,7 +201,7 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-num_epochs = 1 #1000 #10
+num_epochs = 10 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
@@ -94,34 +218,24 @@ gradient_accumulation_multiplier = 4
 
 validation_set_scoring = True
 
-
-
-
 ############################################################
 
 warmup_steps_count = 2000
 #learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
-learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-5, 5e-5]
 
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = "distilbert-base-uncased"
-model_choice = 'roberta-large'
+#model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 
 
-checkpoint_path = 'checkpoints/QA_1017.pt'
+checkpoint_path = 'checkpoints/experiment9_QA_979.pt'
 
-#chosen_dataset = 'trivia_qa'
-chosen_dataset = 'natural_questions'
-
+chosen_dataset = 'trivia_qa'
 context_cutoff_count = 1024
 context_token_count = 512
 multi_answer = False
-
-
-
-
-############################################################
 
 dataset_version = "./" + chosen_dataset + "_dataset_" + model_choice + "_" + str(context_cutoff_count) + "_" + str(context_token_count)
 dataset_version += "_" + str(multi_answer)
@@ -279,6 +393,11 @@ for chosen_learning_rate in learning_rate_choices:
 	                			 'end_positions': batch['end_positions'].to(device)}
 	                outputs = model(**new_batch)
 
+	                print("model structure and output")
+	                print(model.__dict__)
+	                print(outputs.keys())
+	                print(outputs)
+
 	                loss = outputs.loss
 	                progress_bar.update(1)
 
@@ -400,28 +519,24 @@ for chosen_learning_rate in learning_rate_choices:
 
 	    ############################################################
 
-	    exact_match_score = exact_match(final_predictions, final_references)
+	    exact_match = exact_match(final_predictions, final_references)
 
 	    ############################################################
 
-	    print("Exact Match: " + str(round(exact_match_score * 100, 2)))
-	    print("F1-Score: " + str(round(f1_score * 100, 2)))
-
 	    f1_scores_saved.append(round(f1_score * 100, 2))
-	    exact_matches_saved.append(round(exact_match_score * 100, 2))
+	    exact_matches_saved.append(round(exact_match * 100, 2))
 
 
 	print("Processing " + dataset_version + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
+	print('f1_scores_saved: ' + str(f1_scores_saved))
+	print("F1 Score Average: " + str(statistics.mean(f1_scores_saved)))
+	if len(f1_scores_saved) > 1:
+	    print("F1 Score Standard Variation: " + str(statistics.stdev(f1_scores_saved)))
 
 	print('exact_match: ' + str(exact_matches_saved))
 	print("Exact Match Average: " + str(statistics.mean(exact_matches_saved)))
 	if len(exact_matches_saved) > 1:
 	    print("Exact Match Standard Variation: " + str(statistics.stdev(exact_matches_saved)))
-
-	print('f1_scores_saved: ' + str(f1_scores_saved))
-	print("F1 Score Average: " + str(statistics.mean(f1_scores_saved)))
-	if len(f1_scores_saved) > 1:
-	    print("F1 Score Standard Variation: " + str(statistics.stdev(f1_scores_saved)))
 
 	print("Inference Time Average: " + str(statistics.mean(inference_times)))
 	print("Dataset Execution Run Time: " + str((time.time() - execution_start) / number_of_runs))
@@ -430,7 +545,6 @@ for chosen_learning_rate in learning_rate_choices:
 	
 
 	############################################################
-
 
 
 

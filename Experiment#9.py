@@ -83,17 +83,17 @@ gradient_accumulation_multiplier = 4
 #learning_rate_choices = [0.001, 0.005, 0.0001, 0.0005, 1e-5, 5e-5] #1e-5
 #learning_rate_choices = [0.001, 0.003, 0.0002]
 
-learning_rate_choices = [5e-5]
+learning_rate_choices = [0.003]
 
 ############################################################
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
-bottleneck_value = 256
+bottleneck_value = 64
 
 model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 
-checkpoint_path = 'checkpoints/experiment9_checkpoint2966.pt'
+checkpoint_path = 'checkpoints/experiment9_checkpoint3267.pt'
 
 use_all_adapter = False
 
@@ -224,16 +224,11 @@ for chosen_learning_rate in learning_rate_choices:
 
 	    if validation_set_scoring == True:
 
-	        training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
-	        train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)
-	        train.reset_index(drop=True, inplace=True)
-	        validation.reset_index(drop=True, inplace=True)
-
-	        training_dataset_pandas = train#[:1000]
+	        training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
 	        training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
 	        training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
 
-	        validation_dataset_pandas = validation#[:1000]
+	        validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
 	        validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
 	        validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 

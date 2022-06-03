@@ -175,7 +175,7 @@ average_hidden_state = False
 
 validation_set_scoring = False
 
-learning_rate_for_each_dataset = [5e-5, 5e-6, 5e-5]
+learning_rate_for_each_dataset = [5e-5, 5e-6, 2e-5]
 assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
 
@@ -184,14 +184,14 @@ gradient_accumulation_multiplier = 4
 #model_choice = 'roberta-large'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+model_choice = 'allenai/scibert_scivocab_uncased'
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = "distilbert-base-uncased"
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -340,16 +340,11 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
 
         if validation_set_scoring == True:
 
-            training_df = pd.DataFrame({'label': train_set_label, 'text': train_set_text})
-            train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)
-            train.reset_index(drop=True, inplace=True)
-            validation.reset_index(drop=True, inplace=True)
-
-            training_dataset_pandas = train#[:1000]
+            training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
             training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
             training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
 
-            validation_dataset_pandas = validation#[:1000]
+            validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
             validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
             validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 

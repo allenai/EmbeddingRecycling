@@ -358,7 +358,7 @@ number_of_warmup_steps = 100
 model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 
-checkpoint_path = 'checkpoints/experiment9_ner_2011.pt'
+checkpoint_path = 'checkpoints/experiment9_ner_2312.pt'
 assigned_batch_size = 32
 tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
@@ -478,16 +478,11 @@ for chosen_learning_rate in learning_rate_choices:
 
         if validation_set_scoring == True:
 
-            training_df = pd.DataFrame({'ner_tags': train_set_label, 'tokens': train_set_text})
-            train, validation = train_test_split(training_df, test_size=0.15, shuffle=True, random_state=random_state)
-            train.reset_index(drop=True, inplace=True)
-            validation.reset_index(drop=True, inplace=True)
-
-            training_dataset_pandas = train#[:1000]
+            training_dataset_pandas = pd.DataFrame({'ner_tags': train_set_label, 'tokens': train_set_text})#[:1000]
             training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
             training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
 
-            validation_dataset_pandas = validation#[:1000]
+            validation_dataset_pandas = pd.DataFrame({'ner_tags': dev_set_label, 'tokens': dev_set_text})#[:1000]
             validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
             validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 
