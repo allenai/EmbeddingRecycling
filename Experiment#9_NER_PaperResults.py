@@ -348,11 +348,11 @@ validation_set_scoring = False
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 number_of_warmup_steps = 100
  
-#model_choice = 'roberta-large'
-model_choice = 'allenai/scibert_scivocab_uncased'
+model_choice = 'roberta-large'
+#model_choice = 'allenai/scibert_scivocab_uncased'
 
-chosen_learning_rate_choices = [1e-4, 2e-5, 2e-4]
-chosen_bottleneck_values = [64, 64, 256]
+chosen_learning_rate_choices = [5e-5, 2e-5, 2e-4]
+chosen_bottleneck_values = [256, 64, 256]
 
 assigned_batch_size = 32
 tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)

@@ -29,32 +29,31 @@ os.environ['PYTHONHASHSEED'] = str(random_state)
 
 ############################################################
 
-def preprocess_function_multi_answer(examples):
-	questions = [q.strip() for q in examples["question"]]
-	inputs = tokenizer(
-		questions,
-		examples["context"],
-		max_length=context_token_count,
-		truncation="only_second",
-		return_offsets_mapping=True,
-		padding="max_length",
-		)
+def preprocess_function_single_answer_SQuADv2(examples):
+    questions = [q.strip() for q in examples["question"]]
+    inputs = tokenizer(
+        questions,
+        examples["context"],
+        max_length=context_token_count,
+        truncation="only_second",
+        return_offsets_mapping=True,
+        padding="max_length",
+    )
 
-	offset_mapping = inputs.pop("offset_mapping")
-	answers = examples["answers"]
-	start_positions = []
-	end_positions = []
+    offset_mapping = inputs.pop("offset_mapping")
+    answers = examples["answers"]
+    start_positions = []
+    end_positions = []
 
-	for i, offset in enumerate(offset_mapping):
+    for i, offset in enumerate(offset_mapping):
 
-	    current_start_positions = []
-	    current_end_positions = []
+    	answer = answers[i]
 
-	    for j in range(0, len(answers[i]['text'])):
-
-	        answer = {'text': [answers[i]['text'][j]], "answer_start": [answers[i]['answer_start'][j]]}
-
-	        #answer = answers[i]
+    	# No answer given for question 
+    	if len(answer["answer_start"]) == 0 and len(answer["text"]) == 0:
+    		start_positions.append(0)
+    		end_positions.append(0)
+    	else:
 	        start_char = answer["answer_start"][0]
 	        end_char = answer["answer_start"][0] + len(answer["text"][0])
 	        sequence_ids = inputs.sequence_ids(i)
@@ -70,36 +69,26 @@ def preprocess_function_multi_answer(examples):
 
 	        # If the answer is not fully inside the context, label it (0, 0)
 	        if offset[context_start][0] > end_char or offset[context_end][1] < start_char:
-	            current_start_positions.append(0)
-	            current_end_positions.append(0)
+	            start_positions.append(0)
+	            end_positions.append(0)
 	        else:
 	            # Otherwise it's the start and end token positions
 	            idx = context_start
 	            while idx <= context_end and offset[idx][0] <= start_char:
 	                idx += 1
-	            current_start_positions.append(idx - 1)
+	            start_positions.append(idx - 1)
 
 	            idx = context_end
 	            while idx >= context_start and offset[idx][1] >= end_char:
 	                idx -= 1
-	            current_end_positions.append(idx + 1)
+	            end_positions.append(idx + 1)
 
-	    ################################################
-
-	    while len(current_start_positions) < 32:
-	    	current_start_positions.append(-1)
-	    	current_end_positions.append(-1)
-
-	    ################################################
-
-	    start_positions.append(current_start_positions)
-	    end_positions.append(current_end_positions)
-
-	inputs["start_positions"] = start_positions
-	inputs["end_positions"] = end_positions
-	return inputs
+    inputs["start_positions"] = start_positions
+    inputs["end_positions"] = end_positions
+    return inputs
 
 ########################################################################
+
 
 def preprocess_function_single_answer(examples):
     questions = [q.strip() for q in examples["question"]]
@@ -241,16 +230,10 @@ def findIndexesOfAnswers(substring_list, context):
 
 	###############################
 
-	if multi_answer == True:
-
-		return found_aliases, indices
-
+	if len(found_aliases) > 0: 
+		return [str(lowestAlias)], [lowestIndex]
 	else:
-
-		if len(found_aliases) > 0: 
-			return [str(lowestAlias)], [lowestIndex]
-		else:
-			return [], []
+		return [], []
 
 
 ########################################################################
@@ -273,7 +256,8 @@ def reformat_trivia_qa(examples):
 			if len(current_context) == 0:
 				print("Major Error!")
 
-		current_context = (" ").join(current_context.split(" ")[:context_cutoff_count])
+		#current_context = (" ").join(current_context.split(" ")[:context_cutoff_count])
+		current_context = current_context
 
 		#if len(examples['answer'][i]['aliases']) == 0:
 		#	print("Missing aliases!")
@@ -373,10 +357,10 @@ def reformat_NQ(examples):
 
 ########################################################################
 
+#model_choice = 'roberta-large'
+model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = "distilbert-base-uncased"
-model_choice = 'roberta-large'
-#model_choice = 'allenai/scibert_scivocab_uncased'
 
 tokenizer = AutoTokenizer.from_pretrained(model_choice)
 
@@ -385,15 +369,22 @@ context_token_count = 512
 
 multi_answer = False
 
-#chosen_dataset = "trivia_qa"
-chosen_dataset = "natural_questions"
+chosen_dataset = "trivia_qa"
+#chosen_dataset = "natural_questions"
+#chosen_dataset = "squad_v2"
+#chosen_dataset = "squad"
+
 #squad = load_dataset('squad')
 
 #################################################################
 
 if chosen_dataset == "trivia_qa":
 	current_dataset = load_dataset(chosen_dataset, 'rc')
-else:
+elif chosen_dataset == "natural_questions":
+	current_dataset = load_dataset(chosen_dataset)
+elif chosen_dataset == "squad_v2":
+	current_dataset = load_dataset(chosen_dataset)
+elif chosen_dataset == "squad":
 	current_dataset = load_dataset(chosen_dataset)
 
 save_path = "./" + chosen_dataset + "_dataset_" + model_choice + "_" + str(context_cutoff_count) + "_" + str(context_token_count)
@@ -403,31 +394,41 @@ print("Preparing " + save_path)
 
 
 
-#print("NQ Example")
-#for i in tqdm(range(0, len(current_dataset['test']))):
-#	#print(current_dataset['train'][i]['answer'][0])
-#	if len(current_dataset['test'][i]['answer']['aliases']) == 0:
-#		print(current_dataset['test'][0])
+print("NQ Example")
+for i in tqdm(range(0, len(current_dataset['train']))):
+	current_context = (" ").join(current_dataset['train'][i]['search_results']['search_context'])
+
+	if len(current_context) == 0:
+		#current_context = (" ").join(current_dataset['train'][i]['entity_pages']['wiki_context'])
+		if len(current_context) == 0:
+			print("Major Error!")
+
+	current_text, found_answers = findIndexesOfAnswers(current_dataset['train'][i]['answer']['aliases'], current_context)
+
+	if len(current_text) == 0:
+		print("Couldn't find alias")
+		print(current_dataset['train'][i])
+		print("-----------------------------------------")
 
 
-print("First example")
-print(current_dataset['train'][10].keys())
-print(current_dataset['train'][10]['document'].keys())
-print(current_dataset['train'][10]['annotations'].keys())
-print(current_dataset['train'][10]['document']['tokens'].keys())
-print(len(current_dataset['train'][10]['document']['tokens']['is_html']))
-print(len(current_dataset['train'][10]['document']['tokens']['token']))
-print(current_dataset['train'][10]['id'])
-print(current_dataset['train'][10]['question'])
-print(current_dataset['train'][10]['document']['title'])
-print(current_dataset['train'][10]['annotations']['short_answers'])
-print(current_dataset['train'][10]['document']['tokens']['token'][451])
-print(current_dataset['train'][10]['document']['tokens']['token'][452])
-print(current_dataset['train'][10]['document']['tokens']['token'][453])
-print(current_dataset['train'][10]['document']['tokens']['is_html'][451])
-print(current_dataset['train'][10]['document']['tokens']['is_html'][452])
-print(current_dataset['train'][10]['document']['tokens']['is_html'][453])
-print(type(current_dataset['train'][10]['document']['tokens']['is_html'][453]))
+#print("First example")
+#print(current_dataset['train'][10].keys())
+#print(current_dataset['train'][10]['document'].keys())
+#print(current_dataset['train'][10]['annotations'].keys())
+#print(current_dataset['train'][10]['document']['tokens'].keys())
+#print(len(current_dataset['train'][10]['document']['tokens']['is_html']))
+#print(len(current_dataset['train'][10]['document']['tokens']['token']))
+#print(current_dataset['train'][10]['id'])
+#print(current_dataset['train'][10]['question'])
+#print(current_dataset['train'][10]['document']['title'])
+#print(current_dataset['train'][10]['annotations']['short_answers'])
+#print(current_dataset['train'][10]['document']['tokens']['token'][451])
+#print(current_dataset['train'][10]['document']['tokens']['token'][452])
+#print(current_dataset['train'][10]['document']['tokens']['token'][453])
+#print(current_dataset['train'][10]['document']['tokens']['is_html'][451])
+#print(current_dataset['train'][10]['document']['tokens']['is_html'][452])
+#print(current_dataset['train'][10]['document']['tokens']['is_html'][453])
+#print(type(current_dataset['train'][10]['document']['tokens']['is_html'][453]))
 #print(type()())
 
 
@@ -436,8 +437,8 @@ print(type(current_dataset['train'][10]['document']['tokens']['is_html'][453]))
 ########################################################################
 
 
-current_dataset['train'] = current_dataset['train'].select([i for i in range(5)])
-current_dataset['validation'] = current_dataset['validation'].select([i for i in range(1)])
+#current_dataset['train'] = current_dataset['train'].select([i for i in range(5)])
+#current_dataset['validation'] = current_dataset['validation'].select([i for i in range(1)])
 
 
 
@@ -491,29 +492,21 @@ print("---------------------------------------------------------------------")
 
 ####################################################################
 
-if multi_answer == True:
-	current_dataset = current_dataset.map(preprocess_function_multi_answer, batched=True, remove_columns=current_dataset["train"].column_names)
-else:
-	if chosen_dataset == "trivia_qa":
-		current_dataset = current_dataset.map(preprocess_function_single_answer, batched=True, remove_columns=current_dataset["train"].column_names)
-	elif chosen_dataset == "natural_questions":
-		current_dataset = current_dataset.map(preprocess_function_single_answer_NQ, batched=True, remove_columns=current_dataset["train"].column_names)
+if chosen_dataset == "trivia_qa":
+	current_dataset = current_dataset.map(preprocess_function_single_answer, batched=True, remove_columns=current_dataset["train"].column_names)
+elif chosen_dataset == "natural_questions":
+	current_dataset = current_dataset.map(preprocess_function_single_answer_NQ, batched=True, remove_columns=current_dataset["train"].column_names)
+elif chosen_dataset == "squad_v2":
+	current_dataset = current_dataset.map(preprocess_function_single_answer_SQuADv2, batched=True, remove_columns=current_dataset["train"].column_names)
+elif chosen_dataset == "squad":
+	current_dataset = current_dataset.map(preprocess_function_single_answer, batched=True, remove_columns=current_dataset["train"].column_names)
 
 ####################################################################
 
 print("---------------------------------------------------------------------")
 print("Before: " + str(len(current_dataset['train'])))
 
-if multi_answer == True:
-	
-	current_dataset['train'] = current_dataset['train'].filter(lambda x: 0 not in x['start_positions'] or 0 not in x['end_positions'])
-	current_dataset['validation'] = current_dataset['validation'].filter(lambda x: 0 not in x['start_positions'] or 0 not in x['end_positions'])
-	current_dataset['test'] = current_dataset['test'].filter(lambda x: 0 not in x['start_positions'] or 0 not in x['end_positions'])
-
-	print("Multi Answer example")
-	print(current_dataset['train'][10])
-
-else:
+if chosen_dataset == 'trivia_qa':
 
 	current_dataset['train'] = current_dataset['train'].filter(lambda x: x['start_positions'] != 0 or x['end_positions'] != 0)
 	current_dataset['validation'] = current_dataset['validation'].filter(lambda x: x['start_positions'] != 0 or x['end_positions'] != 0)

@@ -77,10 +77,10 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-num_epochs = 1 #1000 #10
+num_epochs = 10 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
-number_of_runs = 1 #1 #5
+number_of_runs = 3 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
@@ -99,20 +99,22 @@ validation_set_scoring = True
 
 ############################################################
 
-warmup_steps_count = 2000
+warmup_steps_count_ratio = 0.2
 #learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
-learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
+#model_choice = 'roberta-large'
+model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = "distilbert-base-uncased"
-model_choice = 'roberta-large'
-#model_choice = 'allenai/scibert_scivocab_uncased'
 
 
-checkpoint_path = 'checkpoints/QA_1017.pt'
+checkpoint_path = 'checkpoints/QA_1103.pt'
 
 #chosen_dataset = 'trivia_qa'
-chosen_dataset = 'natural_questions'
+#chosen_dataset = 'natural_questions'
+#chosen_dataset = "squad_v2"
+chosen_dataset = "squad"
 
 context_cutoff_count = 1024
 context_token_count = 512
@@ -130,6 +132,8 @@ triviaqa_dataset = load_from_disk(dataset_version)
 triviaqa_dataset.set_format("torch")
 
 ################################################################
+
+learning_rate_to_performance_dict = {}
 
 for chosen_learning_rate in learning_rate_choices:
 
@@ -151,7 +155,7 @@ for chosen_learning_rate in learning_rate_choices:
 	print("Average Hidden Layers: " + str(average_hidden_state))
 	print("Validation Set Choice: " + str(validation_set_scoring))
 	print("Number of Epochs: " + str(num_epochs))
-	print("Number of Warmup Steps: " + str(warmup_steps_count))
+	print("Ratio of Warmup Steps: " + str(warmup_steps_count_ratio))
 	print("Dataset Version: " + str(dataset_version))
 
 	########################################################################
@@ -192,6 +196,54 @@ for chosen_learning_rate in learning_rate_choices:
 
 	    model.to(device)
 
+	    #print("model structure")
+	    #print(model.__dict__)
+
+	    ############################################################
+
+	    if frozen_embeddings == True:
+
+	    	print("Freezing embeddings")
+
+	    	if model_choice == "roberta-large" or model_choice == "nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large": 
+	    		for param in model.roberta.embeddings.parameters():
+	    			param.requires_grad = False
+	    	elif model_choice == "distilbert-base-uncased":
+	    		for param in model.distilbert.embeddings.parameters():
+	    			param.requires_grad = False
+	    	else:
+	    		for param in model.bert.embeddings.parameters():
+	    			param.requires_grad = False
+
+	    if frozen_layers > 0:
+
+	        if model_choice == "roberta-large" or model_choice == "nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large":
+
+	            print("Number of Layers: " + str(len(list(model.roberta.encoder.layer))))
+
+	            layers_to_freeze = model.roberta.encoder.layer[:frozen_layers]
+	            for module in layers_to_freeze:
+	                for param in module.parameters():
+	                    param.requires_grad = False
+
+	        elif model_choice == "distilbert-base-uncased":
+
+	            print("Number of Layers: " + str(len(list(model.distilbert.transformer.layer))))
+
+	            layers_to_freeze = model.distilbert.transformer.layer[:frozen_layers]
+	            for module in layers_to_freeze:
+	                for param in module.parameters():
+	                    param.requires_grad = False
+
+	        else:
+
+	            print("Number of Layers: " + str(len(list(model.bert.encoder.layer))))
+
+	            layers_to_freeze = model.bert.encoder.layer[:frozen_layers]
+	            for module in layers_to_freeze:
+	                for param in module.parameters():
+	                    param.requires_grad = False
+
 	    ############################################################
 
 	    criterion = nn.CrossEntropyLoss()
@@ -199,8 +251,11 @@ for chosen_learning_rate in learning_rate_choices:
 
 	    num_training_steps = num_epochs * len(train_dataloader)
 
+	    print("Warmup step count")
+	    print(int(warmup_steps_count_ratio * len(train_dataloader)))
+
 	    lr_scheduler = get_scheduler(
-	        name="linear", optimizer=optimizer, num_warmup_steps=warmup_steps_count, num_training_steps=num_training_steps
+	        name="linear", optimizer=optimizer, num_warmup_steps=int(warmup_steps_count_ratio * len(train_dataloader)), num_training_steps=num_training_steps
 	    )
 
 	    ############################################################
@@ -427,10 +482,42 @@ for chosen_learning_rate in learning_rate_choices:
 	print("Dataset Execution Run Time: " + str((time.time() - execution_start) / number_of_runs))
 	print("Epoch Average Time: " + str((time.time() - run_start) / total_epochs_performed))
 
+	if len(f1_scores_saved) > 1:
+
+		learning_rate_to_performance_dict[chosen_learning_rate] = {"f1": [statistics.mean(f1_scores_saved), statistics.stdev(f1_scores_saved)]}
+		learning_rate_to_performance_dict[chosen_learning_rate]['exact_match'] = [statistics.mean(exact_matches_saved), statistics.stdev(exact_matches_saved)]
+
+	else:
+
+		learning_rate_to_performance_dict[chosen_learning_rate] = {"f1": [f1_scores_saved[0], 0.0]}
+		learning_rate_to_performance_dict[chosen_learning_rate]['exact_match'] = [exact_matches_saved[0], 0.0]
 	
 
 	############################################################
 
+highest_key = list(learning_rate_to_performance_dict)[0]
+highest_performance = 0
 
+for key in learning_rate_to_performance_dict.keys():
+
+	current_performance = learning_rate_to_performance_dict[key]["f1"][0]
+	current_performance += learning_rate_to_performance_dict[key]["exact_match"][0]
+
+	if current_performance > highest_performance:
+		highest_performance = current_performance
+		highest_key = key
+
+
+print("---------------------------------------------")
+print("Best Learning Rate Results")
+print("---------------------------------------------")
+print("Exact Match and F1")
+print(learning_rate_to_performance_dict[highest_key]["exact_match"][0])
+print(learning_rate_to_performance_dict[highest_key]["f1"][0])
+print("---------------------------------------------")
+print("Exact Match and F1 StDs")
+print(learning_rate_to_performance_dict[highest_key]["exact_match"][1])
+print(learning_rate_to_performance_dict[highest_key]["f1"][1])
+print("---------------------------------------------")
 
 
