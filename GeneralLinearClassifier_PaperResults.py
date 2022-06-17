@@ -175,7 +175,7 @@ average_hidden_state = False
 
 validation_set_scoring = False
 
-learning_rate_for_each_dataset = [5e-5, 5e-6, 2e-5]
+learning_rate_for_each_dataset = [5e-5, 2e-5, 1e-4]
 assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
 
@@ -184,11 +184,11 @@ gradient_accumulation_multiplier = 4
 #model_choice = 'roberta-large'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-model_choice = 'allenai/scibert_scivocab_uncased'
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+#model_choice = 'allenai/scibert_scivocab_uncased'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)

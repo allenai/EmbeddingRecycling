@@ -179,10 +179,10 @@ gradient_accumulation_multiplier = 4
 
 ############################################################
 
-frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
-frozen_embeddings = False
+frozen_layers = 4 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_embeddings = True
 
-learning_rate_for_each_dataset = [1e-4, 1e-5, 5e-5]
+learning_rate_for_each_dataset = [5e-5, 1e-5, 1e-4]
 
 ############################################################
 

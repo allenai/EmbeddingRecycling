@@ -525,6 +525,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         additional_embeddings: Optional[torch.Tensor] = None,
+        concat_embeddings: bool = False,
     ) -> Union[BaseModelOutput, Tuple[torch.Tensor, ...]]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -558,7 +559,14 @@ class DistilBertModel(DistilBertPreTrainedModel):
                 #print("inputs embeds!")
                 #print(inputs_embeds.shape)
                 #print(additional_embeddings.shape)
-                inputs_embeds = inputs_embeds + additional_embeddings
+
+                if concat_embeddings == True:
+
+                    inputs_embeds = torch.cat((inputs_embeds, additional_embeddings), 1)
+
+                else:
+
+                    inputs_embeds = inputs_embeds + additional_embeddings
 
             ####################################################
 

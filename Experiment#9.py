@@ -353,6 +353,9 @@ for chosen_learning_rate in learning_rate_choices:
 	                    batch = {k: v.to(device) for k, v in batch.items()}
 	                    outputs = model(**batch)
 
+	                    #print('batch example')
+	                    #print(batch)
+
 				        #print(outputs.shape)
 				        #print(len(outputs['hidden_states']))
 				        #print(outputs['hidden_states'][0].shape)

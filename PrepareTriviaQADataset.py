@@ -29,66 +29,46 @@ os.environ['PYTHONHASHSEED'] = str(random_state)
 
 ############################################################
 
-def preprocess_function_single_answer_SQuADv2(examples):
-    questions = [q.strip() for q in examples["question"]]
-    inputs = tokenizer(
-        questions,
-        examples["context"],
-        max_length=context_token_count,
-        truncation="only_second",
-        return_offsets_mapping=True,
-        padding="max_length",
-    )
+def find_all(a_str, sub):
+    start = 0
+    while True:
+        start = a_str.find(sub, start)
+        if start == -1: return
+        yield start
+        start += len(sub) # use start += 1 to find overlapping matches
 
-    offset_mapping = inputs.pop("offset_mapping")
-    answers = examples["answers"]
-    start_positions = []
-    end_positions = []
+def findIndexesOfAnswers(substring_list, context):
 
-    for i, offset in enumerate(offset_mapping):
+	found_aliases = []
+	indices = []
 
-    	answer = answers[i]
+	lowestIndex = float('inf')
+	lowestAlias = ""
 
-    	# No answer given for question 
-    	if len(answer["answer_start"]) == 0 and len(answer["text"]) == 0:
-    		start_positions.append(0)
-    		end_positions.append(0)
-    	else:
-	        start_char = answer["answer_start"][0]
-	        end_char = answer["answer_start"][0] + len(answer["text"][0])
-	        sequence_ids = inputs.sequence_ids(i)
+	for substring in substring_list:
+		
+		currentIndices = list(find_all(context, substring))
 
-	        # Find the start and end of the context
-	        idx = 0
-	        while sequence_ids[idx] != 1:
-	            idx += 1
-	        context_start = idx
-	        while sequence_ids[idx] == 1:
-	            idx += 1
-	        context_end = idx - 1
+		for currentIndex in currentIndices:
+			if currentIndex >= 0:
 
-	        # If the answer is not fully inside the context, label it (0, 0)
-	        if offset[context_start][0] > end_char or offset[context_end][1] < start_char:
-	            start_positions.append(0)
-	            end_positions.append(0)
-	        else:
-	            # Otherwise it's the start and end token positions
-	            idx = context_start
-	            while idx <= context_end and offset[idx][0] <= start_char:
-	                idx += 1
-	            start_positions.append(idx - 1)
+				if currentIndex < lowestIndex:
 
-	            idx = context_end
-	            while idx >= context_start and offset[idx][1] >= end_char:
-	                idx -= 1
-	            end_positions.append(idx + 1)
+					lowestAlias = substring
+					lowestIndex = currentIndex
 
-    inputs["start_positions"] = start_positions
-    inputs["end_positions"] = end_positions
-    return inputs
+				found_aliases.append(substring)
+				indices.append(currentIndex)
+
+	###############################
+
+	if len(found_aliases) > 0: 
+		return [str(lowestAlias)], [lowestIndex]
+	else:
+		return [], []
+
 
 ########################################################################
-
 
 def preprocess_function_single_answer(examples):
     questions = [q.strip() for q in examples["question"]]
@@ -100,6 +80,24 @@ def preprocess_function_single_answer(examples):
         return_offsets_mapping=True,
         padding="max_length",
     )
+
+    ############################################################
+
+    if model_choice == 't5-base' or model_choice == 't5-small':
+
+        given_answers = [current_answer['text'][0] for current_answer in examples["answers"]]
+
+        decoded_inputs = tokenizer(
+            given_answers,
+            max_length=context_token_count,
+            truncation="only_second",
+            return_offsets_mapping=True,
+            padding="max_length",
+        )
+
+        inputs['decoded_inputs'] = decoded_inputs['input_ids']
+
+    ############################################################
 
     offset_mapping = inputs.pop("offset_mapping")
     answers = examples["answers"]
@@ -140,101 +138,6 @@ def preprocess_function_single_answer(examples):
     inputs["start_positions"] = start_positions
     inputs["end_positions"] = end_positions
     return inputs
-
-########################################################################
-
-def preprocess_function_single_answer_NQ(examples):
-    questions = [q.strip() for q in examples["question"]]
-    inputs = tokenizer(
-        questions,
-        examples["context"],
-        max_length=context_token_count,
-        truncation="only_second",
-        return_offsets_mapping=True,
-        padding="max_length",
-    )
-
-    offset_mapping = inputs.pop("offset_mapping")
-    answers_text = examples["answers_text"]
-    answers_index = examples["answers_index"]
-    start_positions = []
-    end_positions = []
-
-    for i, offset in enumerate(offset_mapping):
-        answer = {'text': answers_text[i], "answer_start": answers_index[i]}
-        start_char = answer["answer_start"][0]
-        end_char = answer["answer_start"][0] + len(answer["text"][0])
-        sequence_ids = inputs.sequence_ids(i)
-
-        # Find the start and end of the context
-        idx = 0
-        while sequence_ids[idx] != 1:
-            idx += 1
-        context_start = idx
-        while sequence_ids[idx] == 1:
-            idx += 1
-        context_end = idx - 1
-
-        # If the answer is not fully inside the context, label it (0, 0)
-        if offset[context_start][0] > end_char or offset[context_end][1] < start_char:
-            start_positions.append(0)
-            end_positions.append(0)
-        else:
-            # Otherwise it's the start and end token positions
-            idx = context_start
-            while idx <= context_end and offset[idx][0] <= start_char:
-                idx += 1
-            start_positions.append(idx - 1)
-
-            idx = context_end
-            while idx >= context_start and offset[idx][1] >= end_char:
-                idx -= 1
-            end_positions.append(idx + 1)
-
-    inputs["start_positions"] = start_positions
-    inputs["end_positions"] = end_positions
-    return inputs
-
-########################################################################
-
-def find_all(a_str, sub):
-    start = 0
-    while True:
-        start = a_str.find(sub, start)
-        if start == -1: return
-        yield start
-        start += len(sub) # use start += 1 to find overlapping matches
-
-def findIndexesOfAnswers(substring_list, context):
-
-	found_aliases = []
-	indices = []
-
-	lowestIndex = float('inf')
-	lowestAlias = ""
-
-	for substring in substring_list:
-		
-		currentIndices = list(find_all(context, substring))
-
-		for currentIndex in currentIndices:
-			if currentIndex >= 0:
-
-				if currentIndex < lowestIndex:
-
-					lowestAlias = substring
-					lowestIndex = currentIndex
-
-				found_aliases.append(substring)
-				indices.append(currentIndex)
-
-	###############################
-
-	if len(found_aliases) > 0: 
-		return [str(lowestAlias)], [lowestIndex]
-	else:
-		return [], []
-
 
 ########################################################################
 
@@ -289,78 +192,16 @@ def reformat_trivia_qa(examples):
 
 ########################################################################
 
-def reformat_NQ(examples):
-
-	ids = []
-	titles = []
-	contexts = []
-	questions = []
-	answers_text = []
-	answers_index = []
-
-	for i in range(0, len(examples['document'])):
-
-		current_context = ""
-		for token, is_html_bool in zip(examples['document'][i]['tokens']['token'][:2048], 
-									   examples['document'][i]['tokens']['is_html'][:2048]):
-			if not is_html_bool:
-				current_context += token + " "
-
-		# Remove spaces after punctuation
-		current_context = re.sub(r'\s([?.!"](?:\s|$))', r'\1', current_context)
-		current_context = current_context.replace(" . ", ". ").replace(" , ", ", ").replace(" : ", ": ")
-		current_context = current_context.replace(" ; ", "; ").replace(" ( ", " (").replace(" ) ", ") ")
-		current_context = current_context.replace(" '' ", "'' ").replace(" `` ", " ``").replace("  ", " ")
-		current_context = current_context.replace(" °", "°").replace(" ° ", "°")
-
-		print("-------------------------------------------------")
-		print("current_context")
-		print(current_context)
-		print("-------------------------------------------------")
-
-		current_answers_given = examples['annotations'][i]['short_answers']
-		current_answers_given = [answer_choice['text'] for answer_choice in current_answers_given]
-		current_answers_given = [answer_choice for sub_list in current_answers_given for answer_choice in sub_list]
-
-		current_text, current_found_answers = findIndexesOfAnswers(current_answers_given, current_context)
-		current_answers = {'text': current_text, 'answer_start': current_found_answers}
-
-		if len(current_text) == 0:
-			#print("-------------------------------------------------")
-			#print(examples['annotations'][i]['short_answers'])
-			#print(current_context)
-			#print("-------------------------------------------------")
-			current_context = "Error"
-
-		ids.append(examples['id'][i])
-		titles.append(str(examples['document'][i]['title']))
-		contexts.append(current_context)
-		questions.append(str(examples['question'][i]))
-		#answers.append(current_answers)
-		answers_text.append(current_text)
-		answers_index.append(current_found_answers)
-
-	#################################################
-
-	inputs = {
-		'id': ids,
-		'title': titles,
-		'context': contexts,
-		'question': questions,
-		#'answers': answers
-		'answers_text': answers_text,
-		'answers_index': answers_index
-	}
-
-	return inputs
-
-
-########################################################################
-
 #model_choice = 'roberta-large'
-model_choice = 'allenai/scibert_scivocab_uncased'
+#model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = "distilbert-base-uncased"
+model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+#model_choice = "bert-base-uncased"
+#model_choice = 'bert-large-uncased'
+#model_choice = "microsoft/deberta-v2-xlarge"
+#model_choice = 't5-base'
+#model_choice = 't5-small'
 
 tokenizer = AutoTokenizer.from_pretrained(model_choice)
 
@@ -368,6 +209,10 @@ context_cutoff_count = 1024
 context_token_count = 512
 
 multi_answer = False
+
+remove_missing_answers = False
+
+reduced_sample = False
 
 chosen_dataset = "trivia_qa"
 #chosen_dataset = "natural_questions"
@@ -388,27 +233,27 @@ elif chosen_dataset == "squad":
 	current_dataset = load_dataset(chosen_dataset)
 
 save_path = "./" + chosen_dataset + "_dataset_" + model_choice + "_" + str(context_cutoff_count) + "_" + str(context_token_count)
-save_path += "_" + str(multi_answer)
+save_path += "_" + str(multi_answer) + "_" + str(remove_missing_answers) + "_" + str(reduced_sample)
 
 print("Preparing " + save_path)
 
 
 
-print("NQ Example")
-for i in tqdm(range(0, len(current_dataset['train']))):
-	current_context = (" ").join(current_dataset['train'][i]['search_results']['search_context'])
+# print("NQ Example")
+# for i in tqdm(range(0, len(current_dataset['train']))):
+# 	current_context = (" ").join(current_dataset['train'][i]['search_results']['search_context'])
 
-	if len(current_context) == 0:
-		#current_context = (" ").join(current_dataset['train'][i]['entity_pages']['wiki_context'])
-		if len(current_context) == 0:
-			print("Major Error!")
+# 	if len(current_context) == 0:
+# 		#current_context = (" ").join(current_dataset['train'][i]['entity_pages']['wiki_context'])
+# 		if len(current_context) == 0:
+# 			print("Major Error!")
 
-	current_text, found_answers = findIndexesOfAnswers(current_dataset['train'][i]['answer']['aliases'], current_context)
+# 	current_text, found_answers = findIndexesOfAnswers(current_dataset['train'][i]['answer']['aliases'], current_context)
 
-	if len(current_text) == 0:
-		print("Couldn't find alias")
-		print(current_dataset['train'][i])
-		print("-----------------------------------------")
+# 	if len(current_text) == 0:
+# 		print("Couldn't find alias")
+# 		print(current_dataset['train'][i])
+# 		print("-----------------------------------------")
 
 
 #print("First example")
@@ -478,6 +323,19 @@ print(type(current_dataset['test']))
 
 ####################################################################
 
+if reduced_sample == True:
+
+	print("-----------------------------------------------------")
+	print("Generate reduced sample")
+
+	current_dataset['train'] = current_dataset['train'].train_test_split(test_size=0.05)['test']
+	current_dataset['validation'] = current_dataset['validation']
+	current_dataset['test'] = current_dataset['test']
+
+	print("-----------------------------------------------------")
+
+####################################################################
+
 print("---------------------------------------------------------------------")
 print("Before: " + str(len(current_dataset['train'])))
 print("Before: " + str(len(current_dataset['validation'])))
@@ -508,9 +366,13 @@ print("Before: " + str(len(current_dataset['train'])))
 
 if chosen_dataset == 'trivia_qa':
 
-	current_dataset['train'] = current_dataset['train'].filter(lambda x: x['start_positions'] != 0 or x['end_positions'] != 0)
-	current_dataset['validation'] = current_dataset['validation'].filter(lambda x: x['start_positions'] != 0 or x['end_positions'] != 0)
-	current_dataset['test'] = current_dataset['test'].filter(lambda x: x['start_positions'] != 0 or x['end_positions'] != 0)
+	if remove_missing_answers == True:
+
+		print("Removing missing answers")
+
+		current_dataset['train'] = current_dataset['train'].filter(lambda x: x['start_positions'] != 0 or x['end_positions'] != 0)
+		current_dataset['validation'] = current_dataset['validation'].filter(lambda x: x['start_positions'] != 0 or x['end_positions'] != 0)
+		current_dataset['test'] = current_dataset['test'].filter(lambda x: x['start_positions'] != 0 or x['end_positions'] != 0)
 
 print("After: " + str(len(current_dataset['train'])))
 print("---------------------------------------------------------------------")

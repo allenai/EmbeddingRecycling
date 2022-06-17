@@ -224,7 +224,7 @@ device = torch.device(device)
 num_epochs = 10 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
-number_of_runs = 3 #1 #5
+number_of_runs = 10 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
@@ -234,7 +234,7 @@ average_hidden_state = False
 assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
 
-validation_set_scoring = True
+validation_set_scoring = False
 
 
 
@@ -245,23 +245,18 @@ delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 bottleneck_value = 256
 
 warmup_steps_count_ratio = 0.2
-#learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
-learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6] #1e-3, 3e-3, 
 
-model_choice = 'roberta-large'
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#model_choice = "bert-base-uncased"
+learning_rate_for_each_dataset = [1e-4]
 
+#model_choice = 'roberta-large'
+model_choice = "bert-base-uncased"
 
-checkpoint_path = 'checkpoints/experiment9_QA_2501.pt'
-
-#chosen_dataset = 'trivia_qa'
+chosen_dataset = 'trivia_qa'
 #chosen_dataset = 'natural_questions'
 #chosen_dataset = "squad_v2"
-chosen_dataset = "squad"
+#chosen_dataset = "squad"
 
-use_all_adapter = True
+use_all_adapter = False
 
 context_cutoff_count = 1024
 context_token_count = 512
@@ -317,11 +312,50 @@ triviaqa_dataset.set_format("torch")
 
 ################################################################
 
-for chosen_learning_rate in learning_rate_choices:
+best_checkpoints_folder = "best_checkpoints/qa/"
+if not os.path.isdir(best_checkpoints_folder):
+
+    print("Creating folder: " + best_checkpoints_folder)
+    os.mkdir(best_checkpoints_folder)
+
+try:
+	os.mkdir(best_checkpoints_folder + model_choice.replace("/", "-"))
+except:
+	print("Already exists")
+	print(best_checkpoints_folder + model_choice.replace("/", "-"))
+
+############################################################
+
+dataset_folder_path = "paper_results_qa/"
+
+if not os.path.isdir(dataset_folder_path):
+
+	print("Creating folder: " + dataset_folder_path)
+	os.mkdir(dataset_folder_path)
+
+dataset_folder_path += model_choice.replace("/", "-") + "/"
+
+if not os.path.isdir(dataset_folder_path):
+
+    print("Creating folder: " + dataset_folder_path)
+    os.mkdir(dataset_folder_path)
+
+############################################################
+
+for chosen_learning_rate in learning_rate_for_each_dataset:
 
 	print("--------------------------------------------------------------------------")
 	print("Starting new learning rate: " + str(chosen_learning_rate))
 	print("--------------------------------------------------------------------------")
+
+	best_model_save_path = "best_checkpoints/qa/" + model_choice.replace("/","-") + "/"
+	#best_model_save_path += "Dataset_" + dataset + "_"
+	best_model_save_path += "experiment9_qa_chosen_learning_rate_" + str(chosen_learning_rate) + "_"
+	best_model_save_path += "frozen_layers_" + str(frozen_layers) + "_"
+	best_model_save_path += "frozen_embeddings_" + str(frozen_embeddings) + "_"
+	best_model_save_path += "num_epochs_" + str(num_epochs) + "_"
+	best_model_save_path += "patience_value_" + str(patience_value) + "_"
+	best_model_save_path += "number_of_runs_" + str(number_of_runs) + "_"
 
 	execution_start = time.time()
 
@@ -330,7 +364,6 @@ for chosen_learning_rate in learning_rate_choices:
 	print("Frozen Choice: " + str(frozen_choice))
 	print("Number of Runs: " + str(number_of_runs))
 	print('Learning Rate: ' + str(chosen_learning_rate))
-	print("Checkpoint Path: " + checkpoint_path)
 	print("Number of Frozen Layers: " + str(frozen_layers))
 	print("Frozen Embeddings: " + str(frozen_embeddings))
 	print("Patience: " + str(patience_value))
@@ -351,6 +384,10 @@ for chosen_learning_rate in learning_rate_choices:
 	inference_times = []
 
 	for i in range(0, number_of_runs):
+
+	    checkpoint_path = "paper_results_qa/" + model_choice.replace("/", "-") + "/experiment9_qa_" + str(chosen_learning_rate) + "_"
+	    checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
+	    checkpoint_path += str(validation_set_scoring) + "_" + str(bottleneck_value) + "_Run_" + str(i) + ".pt"
 
 	    run_start = time.time()
 
@@ -610,24 +647,31 @@ for chosen_learning_rate in learning_rate_choices:
 	    exact_matches_saved.append(round(exact_match_score * 100, 2))
 
 
-	print('exact_match: ' + str(exact_matches_saved))
-	print("Exact Match Average: " + str(statistics.mean(exact_matches_saved)))
-	if len(exact_matches_saved) > 1:
-	    print("Exact Match Standard Variation: " + str(statistics.stdev(exact_matches_saved)))
+	print("-----------------------------------------------------------------")
+	print("Final Results for Spreadsheet")
+	print("-----------------------------------------------------------------")
+	print("Dataset: " + chosen_dataset)
+	print("Model: " + model_choice)
+	print("Number of Runs: " + str(number_of_runs))
+	print("Number of Epochs: " + str(num_epochs))
+	print("Patience: " + str(patience_value))
+	print("Number of Frozen Layers: " + str(frozen_layers))
+	print("Frozen Embeddings: " + str(frozen_embeddings))
+	print("Validation Set Choice: " + str(validation_set_scoring))
+	print("-----------------------------------------------------------------")
 
-	print("Processing " + dataset_version + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
-	print('f1_scores_saved: ' + str(f1_scores_saved))
-	print("F1 Score Average: " + str(statistics.mean(f1_scores_saved)))
-	if len(f1_scores_saved) > 1:
-	    print("F1 Score Standard Variation: " + str(statistics.stdev(f1_scores_saved)))
+	print("Exact Match and F1 Scores")
+	print(str(round(statistics.mean(exact_matches_saved), 2)))
+	print(str(round(statistics.mean(f1_scores_saved), 2)))
+	print("-----------------------------------------------------------------")
 
-	print("Inference Time Average: " + str(statistics.mean(inference_times)))
-	print("Dataset Execution Run Time: " + str((time.time() - execution_start) / number_of_runs))
-	print("Epoch Average Time: " + str((time.time() - run_start) / total_epochs_performed))
+	print("Micro and Macro F1 Standard Deviations")
+	print(str(round(statistics.stdev(exact_matches_saved), 2)))
+	print(str(round(statistics.stdev(f1_scores_saved), 2)))
+
+	print("-----------------------------------------------------------------")
 
 	
 
 	############################################################
-
-
 
