@@ -196,12 +196,12 @@ def reformat_trivia_qa(examples):
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = "distilbert-base-uncased"
-model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #model_choice = "bert-base-uncased"
 #model_choice = 'bert-large-uncased'
 #model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 't5-base'
-#model_choice = 't5-small'
+model_choice = 't5-small'
 
 tokenizer = AutoTokenizer.from_pretrained(model_choice)
 

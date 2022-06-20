@@ -1,11 +1,13 @@
 
 
+
 import json
 from datasets import load_dataset, load_from_disk, DatasetDict, Dataset, load_metric
-from transformers import DefaultDataCollator, AutoTokenizer, get_scheduler, AutoModel
+from transformers import DefaultDataCollator, AutoTokenizer, get_scheduler, AutoModelForQuestionAnswering, AutoModelForSequenceClassification
 from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
 from tqdm import tqdm
 import torch.nn as nn
+from opendelta import AdapterModel, BitFitModel
 import tensorflow as tf
 
 from urllib.request import urlopen, Request
@@ -35,25 +37,19 @@ class CustomBERTModel(nn.Module):
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
           if model_choice == "roberta-large":
 
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
             self.encoderModel = model_encoding
 
           elif model_choice == "nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large":
 
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 384
-            self.encoderModel = model_encoding
-
-          elif model_choice == "t5-small":
-
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-            embedding_size = 512
             self.encoderModel = model_encoding
 
           else:
 
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 768
             self.encoderModel = model_encoding
 
@@ -80,28 +76,14 @@ class CustomBERTModel(nn.Module):
 
             elif model_choice == 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large':
 
-                print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
+                print("Number of Layers: " + str(len(list(self.encoderModel.roberta.encoder.layer))))
 
-                layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
-                for module in layers_to_freeze:
-                    for param in module.parameters():
-                        param.requires_grad = False
-
-            elif model_choice == 't5-base':
-
-                layers_to_freeze = self.encoderModel.encoder.block[:frozen_layer_count]
-                for module in layers_to_freeze:
-                    for param in module.parameters():
-                        param.requires_grad = False
-
-                layers_to_freeze = self.encoderModel.decoder.block[:frozen_layer_count]
+                layers_to_freeze = self.encoderModel.roberta.encoder.layer[:frozen_layer_count]
                 for module in layers_to_freeze:
                     for param in module.parameters():
                         param.requires_grad = False
 
             else:
-
-                #print(self.encoderModel.__dict__)
 
                 print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
 
@@ -117,18 +99,7 @@ class CustomBERTModel(nn.Module):
             print("Frozen Embeddings Layer")
             #print(self.encoderModel.__dict__)
             if model_choice == 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large':
-                for param in self.encoderModel.embeddings.parameters():
-                    param.requires_grad = False
-
-            elif model_choice == 't5-base':
-
-                for param in self.encoderModel.shared.parameters():
-                    param.requires_grad = False
-
-                for param in self.encoderModel.encoder.embed_tokens.parameters():
-                    param.requires_grad = False
-
-                for param in self.encoderModel.decoder.embed_tokens.parameters():
+                for param in self.encoderModel.roberta.embeddings.parameters():
                     param.requires_grad = False
 
             else:
@@ -143,6 +114,15 @@ class CustomBERTModel(nn.Module):
           self.average_hidden_state = average_hidden_state
 
           ############################################################################
+
+          if delta_model_choice == 'BitFit':
+                self.delta_model = BitFitModel(self.encoderModel)
+                self.delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
+                self.delta_model.log()
+          elif delta_model_choice == 'Adapter':
+                self.delta_model = AdapterModel(backbone_model=self.encoderModel, bottleneck_dim=bottleneck_value)
+                self.delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
+                self.delta_model.log()
 
           if model_choice == "allenai/scibert_scivocab_uncased":
 
@@ -163,35 +143,28 @@ class CustomBERTModel(nn.Module):
               							 )
 
 
+          #self.encoderModel.classifier = None
+          for param in self.encoderModel.classifier.parameters():
+              param.requires_grad = False
+
+
 
           
 
-    def forward(self, input_ids, attention_mask, start_positions, end_positions, decoded_inputs=None, token_type_ids=None):
+    def forward(self, input_ids, attention_mask, start_positions, end_positions):
 
-        if model_choice == 't5-base' or model_choice == 't5-small':
-
-            if decoded_inputs == None:
-                print("Error with decoded_inputs!")
-
-            output_hidden_states = self.encoderModel(input_ids=input_ids, decoder_input_ids=decoded_inputs)#['last_hidden_state']
-            last_hidden_state = output_hidden_states['last_hidden_state']
-
-        else:
-
-            output_hidden_states = self.encoderModel(input_ids, attention_mask)['hidden_states']#['last_hidden_state']
-            last_hidden_state = output_hidden_states[len(output_hidden_states) - 1]
-
-	    ##################################################################
+        output_hidden_states = self.encoderModel(input_ids, attention_mask)['hidden_states']#['last_hidden_state']
+        last_hidden_state = output_hidden_states[len(output_hidden_states) - 1]
 
         classifier_output = self.classifier(last_hidden_state)
         start_logits = classifier_output[:, :, 0]
         end_logits = classifier_output[:, :, 1]
 
-	    #print("final output")
-	    #print(classifier_output.shape)
-	    #print(start_logits.shape)
-	    #print(end_logits.shape)
-				
+        #print("final output")
+        #print(classifier_output.shape)
+        #print(start_logits.shape)
+        #print(end_logits.shape)
+			
         return {'start_logits': start_logits, 'end_logits': end_logits}
 
 ##################################################
@@ -251,7 +224,7 @@ device = torch.device(device)
 num_epochs = 10 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
-number_of_runs = 10 #1 #5
+number_of_runs = 3 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
@@ -261,29 +234,34 @@ average_hidden_state = False
 assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
 
-validation_set_scoring = False
+validation_set_scoring = True
 
-warmup_steps_count_ratio = 0.2
+
+
 
 ############################################################
 
-#model_choice = 'roberta-large'
+delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
+bottleneck_value = 256
+
+warmup_steps_count_ratio = 0.2
+#learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [5e-6] #1e-3, 3e-3, 
+
+model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #model_choice = "bert-base-uncased"
-#model_choice = 't5-base'
-#model_choice = 't5-small'
-#model_choice = "distilbert-base-uncased"
 
-learning_rate_for_each_dataset = [5e-5]
+
+checkpoint_path = 'checkpoints/experiment9_QA_2700.pt'
 
 chosen_dataset = 'trivia_qa'
 #chosen_dataset = 'natural_questions'
 #chosen_dataset = "squad_v2"
 #chosen_dataset = "squad"
 
-############################################################
+use_all_adapter = False
 
 context_cutoff_count = 1024
 context_token_count = 512
@@ -291,6 +269,43 @@ multi_answer = False
 remove_missing_answers = False
 
 reduced_sample = False
+
+############################################################
+
+if model_choice == 'roberta-large':
+
+	unfrozen_components = ['classifier']
+	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+	starting_layer_for_adapters = 12
+	if use_all_adapter == True:
+		starting_layer_for_adapters = 0
+
+	for i in range(starting_layer_for_adapters, 24):
+		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
+		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
+		unfrozen_components.append(attention_adapter)
+		unfrozen_components.append(output_adapter)
+
+elif model_choice == 'allenai/scibert_scivocab_uncased' or model_choice == "bert-base-uncased":
+
+	unfrozen_components = ['classifier']
+	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+	starting_layer_for_adapters = 6
+	if use_all_adapter == True:
+		starting_layer_for_adapters = 0
+
+	for i in range(starting_layer_for_adapters, 12):
+		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
+		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
+		unfrozen_components.append(attention_adapter)
+		unfrozen_components.append(output_adapter)
+
+else:
+
+	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+	unfrozen_components = []
 
 ############################################################
 
@@ -302,50 +317,11 @@ triviaqa_dataset.set_format("torch")
 
 ################################################################
 
-best_checkpoints_folder = "best_checkpoints/qa/"
-if not os.path.isdir(best_checkpoints_folder):
-
-    print("Creating folder: " + best_checkpoints_folder)
-    os.mkdir(best_checkpoints_folder)
-
-try:
-	os.mkdir(best_checkpoints_folder + model_choice.replace("/", "-"))
-except:
-	print("Already exists")
-	print(best_checkpoints_folder + model_choice.replace("/", "-"))
-
-############################################################
-
-dataset_folder_path = "paper_results_qa/"
-
-if not os.path.isdir(dataset_folder_path):
-
-	print("Creating folder: " + dataset_folder_path)
-	os.mkdir(dataset_folder_path)
-
-dataset_folder_path += model_choice.replace("/", "-") + "/"
-
-if not os.path.isdir(dataset_folder_path):
-
-    print("Creating folder: " + dataset_folder_path)
-    os.mkdir(dataset_folder_path)
-
-############################################################
-
-for chosen_learning_rate in learning_rate_for_each_dataset:
+for chosen_learning_rate in learning_rate_choices:
 
 	print("--------------------------------------------------------------------------")
 	print("Starting new learning rate: " + str(chosen_learning_rate))
 	print("--------------------------------------------------------------------------")
-
-	best_model_save_path = "best_checkpoints/qa/" + model_choice.replace("/","-") + "/"
-	#best_model_save_path += "Dataset_" + dataset + "_"
-	best_model_save_path += "chosen_learning_rate_" + str(chosen_learning_rate) + "_"
-	best_model_save_path += "frozen_layers_" + str(frozen_layers) + "_"
-	best_model_save_path += "frozen_embeddings_" + str(frozen_embeddings) + "_"
-	best_model_save_path += "num_epochs_" + str(num_epochs) + "_"
-	best_model_save_path += "patience_value_" + str(patience_value) + "_"
-	best_model_save_path += "number_of_runs_" + str(number_of_runs) + "_"
 
 	execution_start = time.time()
 
@@ -354,6 +330,7 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 	print("Frozen Choice: " + str(frozen_choice))
 	print("Number of Runs: " + str(number_of_runs))
 	print('Learning Rate: ' + str(chosen_learning_rate))
+	print("Checkpoint Path: " + checkpoint_path)
 	print("Number of Frozen Layers: " + str(frozen_layers))
 	print("Frozen Embeddings: " + str(frozen_embeddings))
 	print("Patience: " + str(patience_value))
@@ -362,8 +339,10 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 	print("Number of Epochs: " + str(num_epochs))
 	print("Ratio of Warmup Steps: " + str(warmup_steps_count_ratio))
 	print("Dataset Version: " + str(dataset_version))
+	print("Bottleneck Value Choice: " + str(bottleneck_value))
 	print("Batch Size: " + str(assigned_batch_size * gradient_accumulation_multiplier))
-	print("Reduced Sample Size: " + str(reduced_sample))
+	print("Adapters on All Layers: " + str(use_all_adapter))
+	print("Unfrozen Components: " + str(unfrozen_components))
 
 	########################################################################
 
@@ -372,10 +351,6 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 	inference_times = []
 
 	for i in range(0, number_of_runs):
-
-	    checkpoint_path = "paper_results_qa/" + model_choice.replace("/", "-") + "/" + str(chosen_learning_rate) + "_"
-	    checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
-	    checkpoint_path += str(validation_set_scoring) + "_Run_" + str(i) + ".pt"
 
 	    run_start = time.time()
 
@@ -399,6 +374,11 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 	    print(len(triviaqa_dataset['test']))
 
 	    ############################################################
+
+	    #model = AutoModelForQuestionAnswering.from_pretrained(model_choice)
+
+	    #print("encoderModel")
+	    #print(model.__dict__)
 
 	    model = CustomBERTModel(model_choice, current_dropout, frozen_choice, frozen_layers, 
 	    						average_hidden_state, frozen_embeddings)
@@ -461,7 +441,10 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 
 	            #with torch.no_grad():
 
-	                new_batch = {k: v.to(device) for k, v in batch.items()}
+	                new_batch = {'input_ids': batch['input_ids'].to(device),
+	                			 'attention_mask': batch['attention_mask'].to(device),
+	                			 'start_positions': batch['start_positions'].to(device),
+	                			 'end_positions': batch['end_positions'].to(device)}
 
 	                outputs = model(**new_batch)
 
@@ -487,9 +470,11 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 	        for batch in validation_dataloader:
 
 	            #with torch.no_grad():
-	            	
-	                new_batch = {k: v.to(device) for k, v in batch.items()}
-	                
+	            
+	                new_batch = {'input_ids': batch['input_ids'].to(device),
+	                			 'attention_mask': batch['attention_mask'].to(device),
+	                			 'start_positions': batch['start_positions'].to(device),
+	                			 'end_positions': batch['end_positions'].to(device)}
 	                outputs = model(**new_batch)
 
 	                start_loss = criterion(outputs['start_logits'], batch['start_positions'].to(device))
@@ -523,7 +508,7 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 	        
 	        # early_stopping needs the validation loss to check if it has decresed, 
 	        # and if it has, it will make a checkpoint of the current model
-	        early_stopping(valid_loss, model)
+	        early_stopping(valid_loss, model.delta_model)
 	        
 	        if early_stopping.early_stop:
 	            print("Early stopping")
@@ -535,7 +520,7 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 
 	    print("Loading the Best Model")
 
-	    model.load_state_dict(torch.load(checkpoint_path))
+	    model.delta_model.load_state_dict(torch.load(checkpoint_path))
 
 
 
@@ -559,7 +544,10 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 
 	        with torch.no_grad():
 
-	            new_batch = {k: v.to(device) for k, v in batch.items()}
+	            new_batch = {'input_ids': batch['input_ids'].to(device),
+	                		 'attention_mask': batch['attention_mask'].to(device),
+	                		 'start_positions': batch['start_positions'].to(device),
+	                		 'end_positions': batch['end_positions'].to(device)}
 
 	            outputs = model(**new_batch)
 
@@ -622,31 +610,24 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 	    exact_matches_saved.append(round(exact_match_score * 100, 2))
 
 
-	print("-----------------------------------------------------------------")
-	print("Final Results for Spreadsheet")
-	print("-----------------------------------------------------------------")
-	print("Dataset: " + chosen_dataset)
-	print("Model: " + model_choice)
-	print("Number of Runs: " + str(number_of_runs))
-	print("Number of Epochs: " + str(num_epochs))
-	print("Patience: " + str(patience_value))
-	print("Number of Frozen Layers: " + str(frozen_layers))
-	print("Frozen Embeddings: " + str(frozen_embeddings))
-	print("Validation Set Choice: " + str(validation_set_scoring))
-	print("-----------------------------------------------------------------")
+	print('exact_match: ' + str(exact_matches_saved))
+	print("Exact Match Average: " + str(statistics.mean(exact_matches_saved)))
+	if len(exact_matches_saved) > 1:
+	    print("Exact Match Standard Variation: " + str(statistics.stdev(exact_matches_saved)))
 
-	print("Exact Match and F1 Scores")
-	print(str(round(statistics.mean(exact_matches_saved), 2)))
-	print(str(round(statistics.mean(f1_scores_saved), 2)))
-	print("-----------------------------------------------------------------")
+	print("Processing " + dataset_version + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
+	print('f1_scores_saved: ' + str(f1_scores_saved))
+	print("F1 Score Average: " + str(statistics.mean(f1_scores_saved)))
+	if len(f1_scores_saved) > 1:
+	    print("F1 Score Standard Variation: " + str(statistics.stdev(f1_scores_saved)))
 
-	print("Micro and Macro F1 Standard Deviations")
-	print(str(round(statistics.stdev(exact_matches_saved), 2)))
-	print(str(round(statistics.stdev(f1_scores_saved), 2)))
-
-	print("-----------------------------------------------------------------")
+	print("Inference Time Average: " + str(statistics.mean(inference_times)))
+	print("Dataset Execution Run Time: " + str((time.time() - execution_start) / number_of_runs))
+	print("Epoch Average Time: " + str((time.time() - run_start) / total_epochs_performed))
 
 	
 
 	############################################################
+
+
 
