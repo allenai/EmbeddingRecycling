@@ -1,0 +1,5 @@
+,Source Model,RoBERTa-Large,MiniLM L6-H768,BERT,DistilBERT
+,Consumer Model,MiniLM L6-H768,,DistilBERT,
+ChemProt,Learning Rate,2.00E-05,2.00E-05,5.00E-05,5.00E-05
+SciCite,Learning Rate,5.00E-06,1.00E-05,5.00E-06,1.00E-05
+SciERC-Rel,Learning Rate,2.00E-05,2.00E-05,5.00E-05,2.00E-05

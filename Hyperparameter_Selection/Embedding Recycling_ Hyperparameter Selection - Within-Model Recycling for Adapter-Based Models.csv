@@ -1,0 +1,11 @@
+,,RoBERTa frozen + Unfrozen Adapters on later 12 layers + Unfrozen Classifier,RoBERTa Large Finetuned,SciBERT frozen + Unfrozen Adapters on later 6 layers + Unfrozen Classifier,SciBERT Fully Finetuned,BERT frozen + Unfrozen Adapters on later 6 layers + Unfrozen Classifier,BERT Fully Finetuned
+ChemProt,Learning Rate,1.00E-04,5.00E-05,1.00E-04,5.00E-05,,
+,Bottleneck Dimension,256,N/A,256,N/A,,
+SciCite,Learning Rate,1.00E-04,5.00E-06,5.00E-06,5.00E-06,,
+,Bottleneck Dimension,24,N/A,64,N/A,,
+SciERC-Rel,Learning Rate,2.00E-04,1.00E-05,2.00E-04,2.00E-05,,
+,Bottleneck Dimension,256,N/A,2.56E+02,N/A,,
+TriviaQA,Learning Rate,5.00E-05,1.00E-05,,,1.00E-04,5.00E-05
+,Bottleneck Dimension,256,N/A,,,256,N/A
+SQuAD,Learning Rate,2.00E-05,5.00E-06,,,1.00E-04,5.00E-06
+,Bottleneck Dimension,256,N/A,,,256,N/A

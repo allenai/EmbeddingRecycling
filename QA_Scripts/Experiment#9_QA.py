@@ -221,10 +221,10 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-num_epochs = 10 #1000 #10
+num_epochs = 5 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
-number_of_runs = 3 #1 #5
+number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
@@ -246,22 +246,23 @@ bottleneck_value = 256
 
 warmup_steps_count_ratio = 0.2
 #learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
-learning_rate_choices = [5e-6] #1e-3, 3e-3, 
+learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6] #1e-3, 3e-3, 
 
-model_choice = 'roberta-large'
+#model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = "bert-base-uncased"
+#model_choice = 't5-small'
+model_choice = 'google/t5-v1_1-small'
 
-
-checkpoint_path = 'checkpoints/experiment9_QA_2700.pt'
+checkpoint_path = 'checkpoints/experiment9_QA_3000.pt'
 
 chosen_dataset = 'trivia_qa'
 #chosen_dataset = 'natural_questions'
 #chosen_dataset = "squad_v2"
 #chosen_dataset = "squad"
 
-use_all_adapter = False
+use_all_adapter = True
 
 context_cutoff_count = 1024
 context_token_count = 512

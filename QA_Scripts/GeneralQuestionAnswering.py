@@ -45,7 +45,7 @@ class CustomBERTModel(nn.Module):
             embedding_size = 384
             self.encoderModel = model_encoding
 
-          elif model_choice == "t5-small":
+          elif model_choice == "t5-small" or model_choice == "google/t5-v1_1-small":
 
             model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 512
@@ -87,7 +87,9 @@ class CustomBERTModel(nn.Module):
                     for param in module.parameters():
                         param.requires_grad = False
 
-            elif model_choice == 't5-base' or model_choice == 't5-small':
+            elif model_choice == 't5-base' or model_choice == 't5-small' or model_choice == 'google/t5-v1_1-small':
+
+                print(self.encoderModel.__dict__)
 
                 layers_to_freeze = self.encoderModel.encoder.block[:frozen_layer_count]
                 for module in layers_to_freeze:
@@ -120,7 +122,7 @@ class CustomBERTModel(nn.Module):
                 for param in self.encoderModel.roberta.embeddings.parameters():
                     param.requires_grad = False
 
-            elif model_choice == 't5-base' or model_choice == 't5-small':
+            elif model_choice == 't5-base' or model_choice == 't5-small' or model_choice == 'google/t5-v1_1-small':
 
                 for param in self.encoderModel.shared.parameters():
                     param.requires_grad = False
@@ -168,7 +170,7 @@ class CustomBERTModel(nn.Module):
 
     def forward(self, input_ids, attention_mask, start_positions, end_positions, decoded_inputs=None, token_type_ids=None):
 
-        if model_choice == 't5-base' or model_choice == 't5-small':
+        if model_choice == 't5-base' or model_choice == 't5-small' or model_choice == 'google/t5-v1_1-small':
 
             if decoded_inputs == None:
                 print("Error with decoded_inputs!")
@@ -248,8 +250,8 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-num_epochs = 50 #1000 #10
-patience_value = 5 #10 #3
+num_epochs = 15 #1000 #10
+patience_value = 3 #10 #3
 current_dropout = True
 number_of_runs = 3 #1 #5
 frozen_choice = False
@@ -276,28 +278,29 @@ warmup_steps_count_ratio = 0.2
 #learning_rate_choices = [1e-3, 2e-3, 5e-3, 1e-4, 2e-4, 5e-4]
 learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
-#model_choice = 'roberta-large'
+model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = "bert-base-uncased"
 #model_choice = 't5-base'
-model_choice = 't5-small'
+#model_choice = 't5-small'
+#model_choice = 'google/t5-v1_1-small'
 
 
 
-checkpoint_path = 'checkpoints/general_QA_9107.pt'
+checkpoint_path = 'checkpoints/general_QA_9503.pt'
 
-chosen_dataset = 'trivia_qa'
+#chosen_dataset = 'trivia_qa'
 #chosen_dataset = 'natural_questions'
 #chosen_dataset = "squad_v2"
-#chosen_dataset = "squad"
+chosen_dataset = "squad"
 
 context_cutoff_count = 1024
 context_token_count = 512
 multi_answer = False
 remove_missing_answers = False
 
-reduced_sample = False
+reduced_sample = True
 
 
 
