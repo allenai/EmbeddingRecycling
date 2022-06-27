@@ -146,21 +146,7 @@ class CustomBERTModel(nn.Module):
 
           ############################################################################
 
-          if model_choice == "allenai/scibert_scivocab_uncased":
-
-            self.classifier = nn.Sequential(
-              								nn.Linear(in_features=embedding_size, out_features=2, bias=True)
-              							 )
-
-          elif model_choice == "roberta-large":
-
-          	self.classifier = nn.Sequential(
-              								nn.Linear(in_features=embedding_size, out_features=2, bias=True)
-              							 )
-
-          else:
-
-          	self.classifier = nn.Sequential(
+          self.classifier = nn.Sequential(
               								nn.Linear(in_features=embedding_size, out_features=2, bias=True)
               							 )
 
@@ -170,18 +156,8 @@ class CustomBERTModel(nn.Module):
 
     def forward(self, input_ids, attention_mask, start_positions, end_positions, decoded_inputs=None, token_type_ids=None, question_lengths=None):
 
-        if model_choice == 't5-base' or model_choice == 't5-small':
-
-            if decoded_inputs == None:
-                print("Error with decoded_inputs!")
-
-            output_hidden_states = self.encoderModel(input_ids=input_ids, decoder_input_ids=decoded_inputs)#['last_hidden_state']
-            last_hidden_state = output_hidden_states['last_hidden_state']
-
-        else:
-
-            output = self.encoderModel(input_ids, attention_mask)#['last_hidden_state']
-            last_hidden_state = output['hidden_states'][len(output['hidden_states']) - 1]
+        output = self.encoderModel(input_ids, attention_mask)#['last_hidden_state']
+        last_hidden_state = output['hidden_states'][len(output['hidden_states']) - 1]
 
 	    ##################################################################
 
@@ -189,12 +165,7 @@ class CustomBERTModel(nn.Module):
         start_logits = classifier_output[:, :, 0]
         end_logits = classifier_output[:, :, 1]
 
-	    #print("final output")
-	    #print(classifier_output.shape)
-	    #print(start_logits.shape)
-	    #print(end_logits.shape)
-				
-        return {'start_logits': start_logits, 'end_logits': end_logits, 
+	    return {'start_logits': start_logits, 'end_logits': end_logits, 
         		'hidden_states': output['hidden_states'], 'attentions': output['attentions']}
 
 ##################################################
