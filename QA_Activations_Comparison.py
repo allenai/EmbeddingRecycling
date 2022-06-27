@@ -252,7 +252,7 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-num_epochs = 50 #1000 #10
+num_epochs = 2 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 10 #1 #5
@@ -266,6 +266,8 @@ assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
 
 validation_set_scoring = False
+
+warmup_steps_count_ratio = 0.2
 
 ############################################################
 
@@ -281,7 +283,7 @@ context_token_count = 512
 multi_answer = False
 remove_missing_answers = False
 
-reduced_sample = False
+reduced_sample = True
 
 dataset_version = "./" + chosen_dataset + "_dataset_" + model_choice + "_" + str(context_cutoff_count) + "_" + str(context_token_count)
 dataset_version += "_" + str(multi_answer) + "_" + str(remove_missing_answers) + "_" + str(reduced_sample)
@@ -295,12 +297,13 @@ eval_dataloader = DataLoader(triviaqa_dataset['validation'], batch_size=assigned
 
 ############################################################
 
-chosen_learning_rate = 5e-6
+chosen_learning_rate = 1e-5
 
 fully_finetuned_model = CustomBERTModel(model_choice, current_dropout, frozen_choice, frozen_layers, 
 	    								average_hidden_state, frozen_embeddings)
 
 fully_finetuned_checkpoint_path = "paper_results_qa/bert-base-uncased/5e-06_0_False_10False_Run_0.pt"
+#fully_finetuned_checkpoint_path = "fully_finetuned_roberta_checkpoint"
 
 fully_finetuned_model.load_state_dict(torch.load(fully_finetuned_checkpoint_path))
 
@@ -315,6 +318,8 @@ semifrozen_model = CustomBERTModel(model_choice, current_dropout, frozen_choice,
 	    						   average_hidden_state, frozen_embeddings)
 
 semifrozen_checkpoint_path = "paper_results_qa/bert-base-uncased/2e-05_6_True_10False_Run_9.pt"
+#semifrozen_checkpoint_path = "semifrozen_roberta_checkpoint"
+
 semifrozen_model.load_state_dict(torch.load(semifrozen_checkpoint_path))
 
 semifrozen_model.to(device)
@@ -324,6 +329,7 @@ print(fully_finetuned_checkpoint_path)
 print(semifrozen_checkpoint_path)
 
 ############################################################
+
 
 print("Beginning Evaluation")
 
@@ -377,10 +383,10 @@ for batch in zip(eval_dataloader):
 
             attention_sum = 0
             for question_number in range(0, len(question_lengths)):
-                for layer_index in range(0, 12): # top 3 layers of 12 layers
-                    for tensor_index in range(0, 12): # top 3 layers of 12 layers
+                for layer_index in range(0, 3): # top 3 layers of 12 layers
+                    for attention_head in range(0, 3): # top 3 attention heads of attention heads
                         for question_token in range(0, question_lengths[question_number]): #8 question per batch
-                            attention_sum += sum(sum(finetuned_outputs['attentions'][layer_index][question_number][tensor_index])).cpu().numpy()
+                            attention_sum += sum(sum(finetuned_outputs['attentions'][layer_index][question_number][attention_head])).cpu().numpy()
 
             finetuned_attentions_sums.append(attention_sum)
 
@@ -406,10 +412,10 @@ for batch in zip(eval_dataloader):
 
             attention_sum = 0
             for question_number in range(0, len(question_lengths)):
-                for layer_index in range(0, 12): # top 3 layers of 12 layers
-                    for tensor_index in range(0, 12): # top 3 layers of 12 layers
+                for layer_index in range(0, 3): # top 3 layers of 12 layers
+                    for attention_head in range(0, 3): # top 3 attention heads of attention heads
                         for question_token in range(0, question_lengths[question_number]): #8 question per batch
-                            attention_sum += sum(sum(semifrozen_outputs['attentions'][layer_index][question_number][tensor_index])).cpu().numpy()
+                            attention_sum += sum(sum(semifrozen_outputs['attentions'][layer_index][question_number][attention_head])).cpu().numpy()
 
             semifrozen_attentions_sums.append(attention_sum)
 

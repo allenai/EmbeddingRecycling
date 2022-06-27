@@ -236,12 +236,12 @@ remove_missing_answers = False
 
 reduced_sample = True
 
-only_preprocess_questions = False
+only_preprocess_questions = True
 
-#chosen_dataset = "trivia_qa"
+chosen_dataset = "trivia_qa"
 #chosen_dataset = "natural_questions"
 #chosen_dataset = "squad_v2"
-chosen_dataset = "squad"
+#chosen_dataset = "squad"
 
 #squad = load_dataset('squad')
 
