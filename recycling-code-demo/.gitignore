@@ -128,5 +128,9 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# macOS dev environment artifacts
+# VSCode
+.vscode/*
 .DS_Store
+
+tmp/*
+/tmp
