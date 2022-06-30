@@ -14,6 +14,13 @@ To access our datasets using for question answering (QA), please access the Triv
 
 ## Setup Environment
 
-## Result Replication
+Run the following commands to setup a conda environment:
+
+````
+conda create --name embedding_recycling --file requirements.txt
+conda activate embedding_recycling
+````
+
+## Experiment Replication
 
 ## Citing
