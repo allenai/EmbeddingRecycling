@@ -221,7 +221,7 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-num_epochs = 10 #1000 #10
+num_epochs = 15 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
 number_of_runs = 10 #1 #5
@@ -242,14 +242,14 @@ validation_set_scoring = False
 ############################################################
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
-bottleneck_value = 256
+bottleneck_value = 64
 
 warmup_steps_count_ratio = 0.2
 
-learning_rate_for_each_dataset = [5e-5]
+learning_rate_for_each_dataset = [2e-4]
 
-model_choice = 'roberta-large'
-#model_choice = "bert-base-uncased"
+#model_choice = 'roberta-large'
+model_choice = "bert-base-uncased"
 
 chosen_dataset = 'trivia_qa'
 #chosen_dataset = 'natural_questions'
