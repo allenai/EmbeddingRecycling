@@ -1,12 +1,13 @@
 #! /usr/bin/env	python3
 
+import contextlib
 from functools import partial
 import json
 import os
 from pathlib import Path
 import shutil
 import time
-from typing import Any, Dict, Iterable, List, Optional, Union
+from typing import Any, Dict, Iterable, List, Optional, Union, Iterator
 import tqdm
 from transformers import (
     BertTokenizer,                      # type: ignore
@@ -29,7 +30,7 @@ from s2re.utils import get_file_size
 @sp.dataclass
 class CacheConfig(sp.DataClass):
     _target_: str = sp.Target.to_string(CachingHook)
-    path: str = '/tmp/s2re'
+    path: str = '/tmp/r3'
     backend: str = 'leveldb'
 
 
@@ -60,6 +61,7 @@ class DatasetConfig(sp.DataClass):
     num_samples: int = -1
     loader: LoaderConfig = LoaderConfig()
 
+
 @sp.dataclass
 class FetchConfig(sp.DataClass):
     fetch_ahead: int = 32
@@ -75,7 +77,8 @@ class Experiment(sp.DataClass):
     device: str = 'cpu'
     keep_cache: bool = False
     logs_path: Optional[str] = None
-    steps: List[int] = sp.field(default_factory=lambda: [1, 2, 3, 4, 5])
+    steps: List[int] = sp.field(default_factory=lambda: [2, 3, 4, 5])
+    is_train: bool = False
 
     cache: CacheConfig = CacheConfig()
     tokenizer: TokenizerConfig = TokenizerConfig()
@@ -88,11 +91,24 @@ class Experiment(sp.DataClass):
     dataset: DatasetConfig = DatasetConfig()
 
 
+@contextlib.contextmanager
+def maybe_grad(grad: bool) -> Iterator[None]:
+    prev = torch.is_grad_enabled()
+    try:
+        torch.set_grad_enabled(grad)
+        yield None
+    finally:
+        torch.set_grad_enabled(prev)
+
+
 def run_model(model: transformers.modeling_utils.PreTrainedModel,
               data_loader: Union[DataLoader, Iterable[Any]],
               num_batches: Optional[int] = None,
               step: Optional[str] = None,
+              is_train: bool = False,
               warmup: int = 2) -> float:
+
+    model = model.train() if is_train else model.eval()
 
     if num_batches is None:
         if not isinstance(data_loader, DataLoader):
@@ -109,7 +125,13 @@ def run_model(model: transformers.modeling_utils.PreTrainedModel,
 
     delta = None
 
-    with torch.no_grad():
+    if is_train:
+        optimizer = torch.optim.Adam(model.parameters(), lr=5e-5)
+    else:
+        optimizer = None
+
+    labels = None
+    with maybe_grad(grad=is_train):
         # Warmup
         for i, batch in enumerate(data_loader, start=1):
             if i == 0:
@@ -118,7 +140,15 @@ def run_model(model: transformers.modeling_utils.PreTrainedModel,
                 time.sleep(3)
 
             batch = {k: v.to(model.device) for k, v in batch.items()}
+            if labels is None and is_train:
+                labels = torch.randint(
+                    model.num_labels,                   # type: ignore
+                    (batch['input_ids'].size(0),),
+                    device=model.device
+                )
+
             _ = model(**batch)
+
             _sync()
             num_batches -= 1
             if i >= warmup:
@@ -132,7 +162,15 @@ def run_model(model: transformers.modeling_utils.PreTrainedModel,
         start = time.time()
         for batch in progress_bar:
             batch = {k: v.to(model.device) for k, v in batch.items()}
-            _ = model(**batch)
+            batch['labels'] = labels
+
+            output = model(**batch)
+
+            if optimizer:
+                output.loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+
             cnt += 1
             _sync()
 
@@ -224,6 +262,7 @@ def main(config: Experiment):
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer,
                                             return_tensors="pt")
     data_loader = DataLoader(dataset,
+                             drop_last=True,
                              batch_size=config.batch_size,
                              collate_fn=data_collator)
 
@@ -235,9 +274,11 @@ def main(config: Experiment):
         model = sp.init(config.model,
                         transformers.modeling_utils.PreTrainedModel)
         model.to(config.device)
-        model.eval()
         vanilla_delta = run_model(
-            model=model, data_loader=data_loader, step='vanilla'
+            model=model,
+            data_loader=data_loader,
+            step='vanilla',
+            is_train=config.is_train
         )
         del model
     else:
@@ -248,9 +289,11 @@ def main(config: Experiment):
         model = sp.init(config.cached_model,
                         transformers.modeling_utils.PreTrainedModel)
         model.to(config.device)
-        model.eval()
         caching_off_delta = run_model(
-            model=model, data_loader=data_loader, step='caching_off'
+            model=model,
+            data_loader=data_loader,
+            step='caching_off',
+            is_train=config.is_train
         )
         del model
     else:
@@ -263,10 +306,12 @@ def main(config: Experiment):
         caching_hook = sp.init(config.cache, CachingHook)
 
         model.to(config.device)
-        model.eval()
         with caching_hook.record(model):
             caching_on_delta = run_model(
-                model=model, data_loader=data_loader, step='caching_on'
+                model=model,
+                data_loader=data_loader,
+                step='caching_on',
+                is_train=False
             )
         del model, caching_hook
     else:
@@ -283,11 +328,15 @@ def main(config: Experiment):
                         transformers.modeling_utils.PreTrainedModel)
         caching_hook = sp.init(config.cache, CachingHook)
         model.to(config.device)
-        model.eval()
-        with caching_hook.use(model):
-            caching_use_delta = run_model(model=model,
-                                          data_loader=data_loader,
-                                          step='caching_use')
+        caching_context_fn = (caching_hook.train if config.is_train else
+                              caching_hook.use)
+        with caching_context_fn(model):
+            caching_use_delta = run_model(
+                model=model,
+                data_loader=data_loader,
+                step='caching_use',
+                is_train=config.is_train
+            )
         del model, caching_hook
     else:
         caching_use_delta = None
@@ -297,18 +346,21 @@ def main(config: Experiment):
         model = sp.init(config.cached_model, PreTrainedModel)
         caching_hook = sp.init(config.cache, CachingHook)
         model.to(config.device)
-        model.eval()
-        with caching_hook.use(
+        caching_context_fn = (caching_hook.train if config.is_train else
+                              caching_hook.use)
+
+        with caching_context_fn(
             model,
             fetch_key_fn=lambda x: x['input_ids'],
-            **sp.to_dict(config.fetch),
+            **sp.to_dict(config.fetch),     # type: ignore
         ) as session:
 
             caching_prefetch_delta = run_model(
                 model=model,
                 data_loader=session.iterate(data_loader),
                 num_batches=len(data_loader),
-                step='caching_prefetch'
+                step='caching_prefetch',
+                is_train=config.is_train,
             )
         del model, caching_hook
     else:
