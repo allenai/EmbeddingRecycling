@@ -29,6 +29,6 @@ To replicate our results, use the conda environment listed above and run the fol
 - For NER, use the `NER_Scripts/General_NER_Classifier_PaperResults.py` script
 - For QA, use the `QA_Scripts/GeneralQuestionAnswering_PaperResults.py` script
 
-
+The hyperparameters for replicating each experiment are included in the `HyperparameterSelection` folder
 
 ## Citing
