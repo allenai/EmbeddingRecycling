@@ -23,4 +23,12 @@ conda activate embedding_recycling
 
 ## Experiment Replication
 
+To replicate our results, use the conda environment listed above and run the following scripts for each set of dataset group:
+
+- For text classification, use the `TextClassificationScripts/GeneralLinearClassifier_PaperResults.py` script
+- For NER, use the `NER_Scripts/General_NER_Classifier_PaperResults.py` script
+- For QA, use the `QA_Scripts/GeneralQuestionAnswering_PaperResults.py` script to replicate the TriviaQA results. For SQuAD, please use the "run_squad.py" script included on the [HuggingFace Transformers repository](https://github.com/huggingface/transformers/blob/main/examples/legacy/question-answering/run_squad.py), which we also include in our main directory.
+
+The hyperparameters for replicating each experiment are included in the `HyperparameterSelection` folder. 
+
 ## Citing

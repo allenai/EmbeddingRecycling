@@ -76,7 +76,7 @@ class CachingHook:
         fetch_spawn: str = 'thread',
         fetch_key_fn: Optional[Callable] = None,
         fetch_timeout: float = 0.1,
-        fetch_retry_count: int = 10
+        fetch_retry_count: int = 10,
     ) -> Iterator[CachingSession]:
 
         caching_modules = cls.find_all_caching_modules(module)
@@ -99,19 +99,32 @@ class CachingHook:
 
     @classmethod
     @contextmanager
-    def Train(cls: Type['CachingHook'],
-              module: torch.nn.Module,
-              backend: str,
-              path: Union[str, Path],
-              backend_kwargs: Optional[Dict[str, Any]] = None,
-              device: Optional[str] = None) -> Iterator[CachingSession]:
+    def Train(
+        cls: Type['CachingHook'],
+        module: torch.nn.Module,
+        backend: str,
+        path: Union[str, Path],
+        backend_kwargs: Optional[Dict[str, Any]] = None,
+        device: Optional[str] = None,
+        fetch_ahead: int = -1,
+        fetch_spawn: str = 'thread',
+        fetch_key_fn: Optional[Callable] = None,
+        fetch_timeout: float = 0.1,
+        fetch_retry_count: int = 10,
+    ) -> Iterator[CachingSession]:
+
         caching_modules = cls.find_all_caching_modules(module)
         session = CachingSession(recording=False,
                                  training=True,
                                  device=device or cls.infer_device(module),
                                  backend=backend,
+                                 fetch_spawn=fetch_spawn,
                                  path=path,
-                                 backend_kwargs=backend_kwargs)
+                                 backend_kwargs=backend_kwargs,
+                                 fetch_ahead=fetch_ahead,
+                                 fetch_key_fn=fetch_key_fn,
+                                 fetch_timeout=fetch_timeout,
+                                 fetch_retry_count=fetch_retry_count)
         try:
             [m.set_session(session) for m in caching_modules]
             yield session
