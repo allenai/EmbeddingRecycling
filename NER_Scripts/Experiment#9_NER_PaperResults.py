@@ -332,7 +332,7 @@ device = torch.device(device)
 
 classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
 
-num_epochs = 100 #1000 #10
+num_epochs = 1000 #1000 #10
 patience_value = 10 #10 #3
 current_dropout = True
 number_of_runs = 10 #1 #5
@@ -343,16 +343,46 @@ frozen_embeddings = False
 average_hidden_state = False
 validation_set_scoring = False
 
+number_of_warmup_steps = 100
+
 ########################################################################################
 
+
+
+
+
+
+
+
+
+
+############################################################
+# Select model and hyperparameters here
+############################################################
+
+chosen_learning_rate_choices = [5e-5, 2e-5, 2e-4] # Learning rate choices for the bc5cdr, JNLPBA, 
+                                                  # and NCBI-disease respectively
+chosen_bottleneck_values = [256, 64, 256] # Bottleneck dimension choices for the Chemprot, SciCite, 
+                                          # and SciERC-Relation respectively
+
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
-number_of_warmup_steps = 100
  
 model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 
-chosen_learning_rate_choices = [5e-5, 2e-5, 2e-4]
-chosen_bottleneck_values = [256, 64, 256]
+############################################################
+
+
+
+
+
+
+
+
+
+
+
+############################################################
 
 assigned_batch_size = 32
 tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)

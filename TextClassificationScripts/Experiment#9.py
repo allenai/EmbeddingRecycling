@@ -3,7 +3,7 @@
 
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel, RobertaForSequenceClassification
-from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer, AutoModelForSequenceClassification
+from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer, AutoModelForSequenceClassification, BertForSequenceClassification
 import tensorflow as tf
 from opendelta import AdapterModel, BitFitModel
 
@@ -49,7 +49,7 @@ def get_gpu_memory():
     memory_free_values = [int(x.split()[0]) for i, x in enumerate(memory_free_info)]
     return memory_free_values
 
-############################################################
+################################################################################
 
 
 device = "cuda:0"
@@ -72,7 +72,7 @@ frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 
-validation_set_scoring = True
+validation_set_scoring = False
 
 assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
@@ -83,19 +83,22 @@ gradient_accumulation_multiplier = 4
 #learning_rate_choices = [0.001, 0.005, 0.0001, 0.0005, 1e-5, 5e-5] #1e-5
 #learning_rate_choices = [0.001, 0.003, 0.0002]
 
-learning_rate_choices = [0.003]
+learning_rate_choices = [1e-4, 2e-4]#[1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
 ############################################################
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
-bottleneck_value = 64
+bottleneck_value = 256
 
-model_choice = 'roberta-large'
+#model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
+#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+model_choice = "distilbert-base-uncased"
 
-checkpoint_path = 'checkpoints/experiment9_checkpoint3267.pt'
+checkpoint_path = 'checkpoints/experiment9_checkpoint13002.pt'
 
-use_all_adapter = False
+use_all_adapter = True
 
 ############################################################
 
@@ -122,6 +125,23 @@ elif model_choice == 'allenai/scibert_scivocab_uncased':
 	starting_layer_for_adapters = 6
 	if use_all_adapter == True:
 		starting_layer_for_adapters = 0
+
+	for i in range(starting_layer_for_adapters, 12):
+		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
+		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
+		unfrozen_components.append(attention_adapter)
+		unfrozen_components.append(output_adapter)
+
+elif model_choice in ['nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large', 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large', 'distilbert-base-uncased']:
+
+	unfrozen_components = ['classifier']
+	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+	starting_layer_for_adapters = 3
+	if use_all_adapter == True:
+		starting_layer_for_adapters = 0
+
+	#unfrozen_components.append('encoder')
 
 	for i in range(starting_layer_for_adapters, 12):
 		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
@@ -283,7 +303,7 @@ for chosen_learning_rate in learning_rate_choices:
 
 	        ############################################################
 
-	        model = AutoModelForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
+	        model = BertForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
 	        #model = RobertaForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
 
 	        if delta_model_choice == 'BitFit':
@@ -294,6 +314,8 @@ for chosen_learning_rate in learning_rate_choices:
 	            delta_model = AdapterModel(backbone_model=model, bottleneck_dim=bottleneck_value)
 	            delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
 	            delta_model.log()
+
+	        ############################################################
 
 	        model.to(device)
 

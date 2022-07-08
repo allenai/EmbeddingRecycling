@@ -165,40 +165,50 @@ device = torch.device(device)
 
 classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
 
-num_epochs = 100 #1000 #10
+num_epochs = 1000 #1000 #10
 patience_value = 10 #10 #3
 current_dropout = True
 number_of_runs = 10 #1 #5
 frozen_choice = False
-#chosen_learning_rate =  0.0001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 average_hidden_state = False
 validation_set_scoring = False
 
 assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
 
+
+
+
+
+
+
+
+############################################################
+# Select model and hyperparameters here
 ############################################################
 
-frozen_layers = 4 #12 layers for BERT total, 24 layers for T5 and RoBERTa
-frozen_embeddings = True
+frozen_layers = 0 # For freezing k-later layers of transformer model
+frozen_embeddings = False # For freezing input embeddings layer of transformer model
 
-learning_rate_for_each_dataset = [5e-5, 1e-5, 1e-4]
-
-############################################################
+learning_rate_for_each_dataset = [5e-5, 1e-5, 1e-4] # Learning rate choices for the bc5cdr, JNLPBA, 
+                                                    # and NCBI-disease respectively
 
 #model_choice = 'roberta-large'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
-
 #model_choice = 'allenai/scibert_scivocab_uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True, model_max_length=512)
- 
 #model_choice = "distilbert-base-uncased"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
-
 model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+
+############################################################
+
+
+
+
+
+
+
+############################################################
+
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512, add_prefix_space=True)
 
 ############################################################

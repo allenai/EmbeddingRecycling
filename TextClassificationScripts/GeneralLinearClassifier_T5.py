@@ -1,5 +1,6 @@
 
 
+
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel, T5ForConditionalGeneration
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
@@ -50,152 +51,6 @@ def get_gpu_memory():
 
 ############################################################
 
-class CustomBERTModel(nn.Module):
-    def __init__(self, number_of_labels, model_choice, dropout_layer, frozen, 
-                 frozen_layer_count, average_hidden_state, frozen_embeddings):
-
-          super(CustomBERTModel, self).__init__()
-          #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
-          if model_choice == "t5-3b":
-
-            model_encoding = T5EncoderModel.from_pretrained(model_choice)
-            embedding_size = 1024
-            self.encoderModel = model_encoding
-
-          elif model_choice in ["roberta-large", "google/t5-large-lm-adapt"]:
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 1024
-            self.encoderModel = model_encoding
-
-          elif model_choice in ["nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large", "microsoft/deberta-v3-xsmall"]:
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 384
-            self.encoderModel = model_encoding
-
-          elif model_choice == "t5-small":
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 512
-            self.encoderModel = model_encoding
-
-          elif model_choice in ["EleutherAI/gpt-neo-1.3B", "google/t5-xl-lm-adapt"]:
-
-            model_encoding = T5ForConditionalGeneration.from_pretrained(model_choice)
-            embedding_size = 2048
-            self.encoderModel = model_encoding
-
-          elif model_choice in ["microsoft/deberta-v2-xlarge", "microsoft/deberta-v2-xxlarge"]:
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 1536
-            self.encoderModel = model_encoding
-
-          else:
-
-            model_encoding = AutoModel.from_pretrained(model_choice)
-            embedding_size = 768
-            self.encoderModel = model_encoding
-
-
-
-          if frozen == True:
-            print("Freezing the model parameters")
-            for param in self.encoderModel.parameters():
-                param.requires_grad = False
-
-
-
-          if frozen_layer_count > 0:
-
-            if model_choice in ["t5-3b", "google/t5-large-lm-adapt"]:
-
-                #print(self.encoderModel.__dict__)
-
-                print("Freezing T5-3b")
-                print("Number of Layers: " + str(len(self.encoderModel.encoder.block)))
-
-                for parameter in self.encoderModel.encoder.embed_tokens.parameters():
-                    parameter.requires_grad = False
-
-                for i, m in enumerate(self.encoderModel.encoder.block):        
-                    #Only un-freeze the last n transformer blocks
-                    if i+1 > 24 - frozen_layer_count:
-                        print(str(i) + " Layer")
-                        for parameter in m.parameters():
-                            parameter.requires_grad = True
-
-            elif model_choice == "distilbert-base-uncased":
-
-                #print(self.encoderModel.__dict__)
-                print("Number of Layers: " + str(len(list(self.encoderModel.transformer.layer))))
-
-                layers_to_freeze = self.encoderModel.transformer.layer[:frozen_layer_count]
-                for module in layers_to_freeze:
-                    for param in module.parameters():
-                        param.requires_grad = False
-
-            else:
-
-                print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
-
-                layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
-                for module in layers_to_freeze:
-                    for param in module.parameters():
-                        param.requires_grad = False
-
-
-
-          
-          if frozen_embeddings == True:
-
-            if model_choice != "google/t5-large-lm-adapt":
-
-                print("Frozen Embeddings Layer")
-                #print(self.encoderModel.__dict__)
-                for param in self.encoderModel.embeddings.parameters():
-                    param.requires_grad = False
-
-
-
-
-
-          ### New layers:
-          self.linear1 = nn.Linear(embedding_size, 256)
-          self.linear2 = nn.Linear(256, number_of_labels)
-
-          self.embedding_size = embedding_size
-          self.average_hidden_state = average_hidden_state
-
-          #print(self.encoderModel.__dict__)
-
-
-          
-
-    def forward(self, ids, mask, decoder_input_ids=None):
-          
-        if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
-
-            total_output = self.encoderModel(input_ids=ids, attention_mask=mask)
-
-        else:
-
-            total_output = self.encoderModel(
-                ids, 
-                attention_mask=mask)
-
-        sequence_output = total_output['last_hidden_state']
-
-        linear1_output = self.linear1(sequence_output[:,0,:].view(-1, self.embedding_size))
-        linear2_output = self.linear2(linear1_output)
-
-        return linear2_output
-
-
-
-############################################################
-
 device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
@@ -213,77 +68,19 @@ frozen_embeddings = False
 average_hidden_state = False
 
 validation_set_scoring = False
-assigned_batch_size = 1
-gradient_accumulation_multiplier = 32
+assigned_batch_size = 4
+gradient_accumulation_multiplier = 8
 
 num_warmup_steps = 100
 
 #learning_rate_choices = [2e-5]
-learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-3, 5e-3, 1e-4, 5e-4]#[1e-3, 5e-3, 1e-4, 5e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 #learning_rate_choices = [3e-5, 4e-5, 5e-5, 6e-5]
 
 ############################################################
  
-#model_choice = "t5-3b"
-#tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'bert-base-uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'roberta-large'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'microsoft/deberta-v3-small'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'microsoft/deberta-v3-xsmall'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'distilroberta-base'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'sentence-transformers/sentence-t5-base'
-#tokenizer = SentenceTransformer(model_choice, device='cuda').tokenizer 
-
-#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = "distilbert-base-uncased"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = "t5-small"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = "EleutherAI/gpt-neo-1.3B"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-#tokenizer.pad_token = tokenizer.eos_token
-
-#model_choice = "google/t5-xl-lm-adapt"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-
-#model_choice = "microsoft/deberta-v2-xxlarge"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-
-model_choice = "microsoft/deberta-v2-xlarge"
+model_choice = "google/t5-large-lm-adapt"
 tokenizer = AutoTokenizer.from_pretrained(model_choice)
-
-#model_choice = "google/t5-large-lm-adapt"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-
-#tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-#model_encoding = AutoModel.from_pretrained(model_choice)
-#embedding_size = 4096
-
-
 
 ############################################################
 
@@ -326,15 +123,6 @@ for chosen_learning_rate in learning_rate_choices:
 
         print("GPU Memory available at the start")
         print(get_gpu_memory())
-
-        #print("Actual memory usage")
-        #from pynvml import *
-        #nvmlInit()
-        #h = nvmlDeviceGetHandleByIndex(0)
-        #info = nvmlDeviceGetMemoryInfo(h)
-        #print(f'total    : {info.total}')
-        #print(f'free     : {info.free}')
-        #print(f'used     : {info.used}')
 
         execution_start = time.time()
 
@@ -418,15 +206,15 @@ for chosen_learning_rate in learning_rate_choices:
 
         else:
 
-            training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
+            training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:100]
             training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
             training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
 
-            validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
+            validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:100]
             validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
             validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 
-            test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
+            test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})#[:100]
             test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
             test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
 
@@ -465,8 +253,24 @@ for chosen_learning_rate in learning_rate_choices:
 
             ############################################################
 
-            model = CustomBERTModel(len(set(train_set_label)), model_choice, current_dropout, 
-                                    frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings)
+            model = T5ForConditionalGeneration.from_pretrained(model_choice)
+
+            if frozen_layers > 0:
+
+                print("Freezing T5-3b")
+                print("Number of Layers: " + str(len(model.encoder.block)))
+
+                for parameter in model.encoder.embed_tokens.parameters():
+                    parameter.requires_grad = False
+
+                for i, m in enumerate(model.encoder.block):        
+                    #Only un-freeze the last n transformer blocks
+                    if i+1 > 24 - frozen_layers:
+                        print(str(i) + " Layer")
+                        for parameter in m.parameters():
+                            parameter.requires_grad = False
+
+            ############################################################
 
             model.to(device)
 
@@ -528,20 +332,11 @@ for chosen_learning_rate in learning_rate_choices:
 
                     #with torch.no_grad():
                     
-                        #batch = {k: v.to(device) for k, v in batch.items()}
+                        new_batch = {'input_ids': batch['input_ids'].to(device), 
+                        			 'attention_mask': batch['attention_mask'].to(device),
+                        			 'labels': batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)}
 
-                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-
-                        if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
-                            new_batch['decoder_input_ids'] = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
-
-                        outputs = model(**new_batch)
-
-                        #print("Example outputs")
-                        #print(outputs)
-                        #print(labels)
-
-                        loss = criterion(outputs, batch['labels'].to(device))
+                        loss = model(input_ids=new_batch['input_ids'], attention_mask=new_batch['attention_mask'], labels=new_batch['labels']).loss
 
                         loss.backward()
 
@@ -562,17 +357,12 @@ for chosen_learning_rate in learning_rate_choices:
 
                     #with torch.no_grad():
                     
-                        #batch = {k: v.to(device) for k, v in batch.items()}
-                        #labels = batch['labels']
+                        new_batch = {'input_ids': batch['input_ids'].to(device), 
+                        			 'attention_mask': batch['attention_mask'].to(device),
+                        			 'labels': batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)}
 
-                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+                        loss = model(input_ids=new_batch['input_ids'], labels=new_batch['labels']).loss
 
-                        if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
-                            new_batch['decoder_input_ids'] = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
-                        
-                        outputs = model(**new_batch)
-
-                        loss = criterion(outputs, batch['labels'].to(device))
                         progress_bar.update(1)
 
                         valid_losses.append(loss.item())
@@ -637,16 +427,25 @@ for chosen_learning_rate in learning_rate_choices:
 
                 with torch.no_grad():
 
-                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+                    inputs = batch['input_ids'].to(device)
+                    attention_mask = batch['attention_mask'].to(device)
+                    labels = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
+                    #decoder_attention_mask = batch['decoder_attention_mask'].to(device)
 
-                    if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
-                        new_batch['decoder_input_ids'] = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
+                    outputs = model(input_ids=inputs,
+                            		attention_mask=attention_mask,
+                            		labels=labels)
+                            		#decoder_attention_mask=b_target_mask)
 
-                    outputs = model(**new_batch)
+                    #print("inference comparison")
+                    #print(batch.keys())
+                    #print(outputs.keys())
+                    #print(torch.argmax(outputs.logits, dim=-1))
+                    #print(torch.argmax(outputs.logits, dim=-1).shape)
+                    #print(outputs.logits.shape)
+                    #print(labels)
 
-                    #labels = batch['labels'].to(device)
-
-                    logits = outputs
+                    logits = outputs.logits
                     predictions = torch.argmax(logits, dim=-1)
                     metric.add_batch(predictions=predictions, references=batch['labels'].to(device))
 
@@ -663,10 +462,14 @@ for chosen_learning_rate in learning_rate_choices:
 
             ############################################################
 
+            total_predictions = total_predictions.reshape(len(total_predictions))
+
             print("--------------------------")
             print("Predictions Shapes")
             print(total_predictions.shape)
             print(total_references.shape)
+            #print(total_predictions)
+            #print(total_references)
 
             results = metric.compute(references=total_references, predictions=total_predictions)
             print("Accuracy for Test Set: " + str(results['accuracy']))
@@ -702,15 +505,11 @@ for chosen_learning_rate in learning_rate_choices:
         ############################################################
 
         if len(micro_averages) > 1:
-            current_learning_rate_results[dataset + "_micro_f1_average"] =  statistics.mean(micro_averages)
-            current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages)
-            current_learning_rate_results[dataset + "_macro_f1_average"] =  statistics.mean(macro_averages)
-            current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages)
-        else:
-            current_learning_rate_results[dataset + "_micro_f1_average"] =  micro_averages[0]
-            current_learning_rate_results[dataset + "_micro_f1_std"] =  0
-            current_learning_rate_results[dataset + "_macro_f1_average"] =  macro_averages[0]
-            current_learning_rate_results[dataset + "_macro_f1_std"] =  0
+
+        	current_learning_rate_results[dataset + "_micro_f1_average"] =  statistics.mean(micro_averages)
+        	current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages)
+        	current_learning_rate_results[dataset + "_macro_f1_average"] =  statistics.mean(macro_averages)
+        	current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages)
 
     ############################################################
     
@@ -879,7 +678,4 @@ for dataset in classification_datasets:
 
     print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0], 2))) 
     print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1], 2))) 
-
-
-
 

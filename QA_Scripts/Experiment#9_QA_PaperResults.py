@@ -239,10 +239,17 @@ validation_set_scoring = False
 
 
 
+
+
+
+
+
+############################################################
+# Select model and hyperparameters here
 ############################################################
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
-bottleneck_value = 64
+bottleneck_value = 64 # Bottleneck dimension choice
 
 warmup_steps_count_ratio = 0.2
 
@@ -252,9 +259,19 @@ learning_rate_for_each_dataset = [2e-4]
 model_choice = "bert-base-uncased"
 
 chosen_dataset = 'trivia_qa'
-#chosen_dataset = 'natural_questions'
-#chosen_dataset = "squad_v2"
-#chosen_dataset = "squad"
+
+############################################################
+
+
+
+
+
+
+
+
+
+
+############################################################
 
 use_all_adapter = False
 

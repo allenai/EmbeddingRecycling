@@ -2,7 +2,7 @@
 
 
 import torch.nn as nn
-from transformers import T5Tokenizer, T5EncoderModel, AutoModelForSequenceClassification
+from transformers import T5Tokenizer, T5EncoderModel, AutoModelForSequenceClassification, BertForSequenceClassification
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer, AutoModelForTokenClassification
 from opendelta import AdapterModel, BitFitModel
 
@@ -59,19 +59,19 @@ class CustomBERTModel(nn.Module):
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
           if model_choice == "roberta-large":
 
-            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
+            model_encoding = BertForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
             self.encoderModel = model_encoding
 
           elif model_choice == "nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large" or model_choice == "microsoft/deberta-v3-xsmall":
 
-            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
+            model_encoding = BertForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 384
             self.encoderModel = model_encoding
 
           else:
 
-            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
+            model_encoding = BertForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 768
             self.encoderModel = model_encoding
 
@@ -182,7 +182,7 @@ class CustomBERTModel(nn.Module):
 
     def forward(self, ids, mask, labels):
 
-            if model_choice == 'roberta-large':
+            if model_choice in ['roberta-large']:
 
                 embeddings = self.encoderModel.roberta.embeddings(ids)
                 extended_attention_mask = self.encoderModel.get_extended_attention_mask(mask, embeddings.size()[:-1], device)
@@ -333,7 +333,7 @@ device = torch.device(device)
 
 classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
 
-num_epochs = 100 #1000 #10
+num_epochs = 1000 #1000 #10
 patience_value = 10 #10 #3
 current_dropout = True
 number_of_runs = 3 #1 #5
@@ -342,11 +342,12 @@ frozen_choice = False
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
-validation_set_scoring = True
+validation_set_scoring = False
 
 #learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]#[0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
 #learning_rate_choices = [0.001, 0.003, 0.0002]
-learning_rate_choices = [5e-6]
+#learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-3, 2e-3, 5e-3]
 
 ########################################################################################
 
@@ -355,10 +356,15 @@ bottleneck_value = 256
 
 number_of_warmup_steps = 100
  
-model_choice = 'roberta-large'
+#model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
+#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+model_choice = "distilbert-base-uncased"
 
-checkpoint_path = 'checkpoints/experiment9_ner_2312.pt'
+use_all_adapter = False
+
+checkpoint_path = 'checkpoints/experiment9_ner_17002.pt'
 assigned_batch_size = 32
 tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
@@ -366,23 +372,45 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
 if model_choice == 'roberta-large':
 
-	unfrozen_components = ['classifier']
+    unfrozen_components = ['classifier']
 
-	for i in range(12, 24):
-		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
-		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
-		unfrozen_components.append(attention_adapter)
-		unfrozen_components.append(output_adapter)
+    starting_layer_for_adapters = 12
+    if use_all_adapter == True:
+        starting_layer_for_adapters = 0
 
-elif model_choice == 'allenai/scibert_scivocab_uncased':
+    for i in range(starting_layer_for_adapters, 24):
+        attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
+        output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
+        unfrozen_components.append(attention_adapter)
+        unfrozen_components.append(output_adapter)
 
-	unfrozen_components = ['classifier']
+elif model_choice in ['allenai/scibert_scivocab_uncased', 'distilbert-base-uncased']:
 
-	for i in range(6, 12):
-		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
-		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
-		unfrozen_components.append(attention_adapter)
-		unfrozen_components.append(output_adapter)
+    unfrozen_components = ['classifier']
+
+    starting_layer_for_adapters = 6
+    if use_all_adapter == True:
+        starting_layer_for_adapters = 0
+
+    for i in range(starting_layer_for_adapters, 12):
+        attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
+        output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
+        unfrozen_components.append(attention_adapter)
+        unfrozen_components.append(output_adapter)
+
+elif model_choice in ['nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large', 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large']:
+
+    unfrozen_components = ['classifier']
+
+    starting_layer_for_adapters = 3
+    if use_all_adapter == True:
+        starting_layer_for_adapters = 0
+
+    for i in range(starting_layer_for_adapters, 6):
+        attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
+        output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
+        unfrozen_components.append(attention_adapter)
+        unfrozen_components.append(output_adapter)
 
 
 ############################################################
@@ -420,6 +448,7 @@ for chosen_learning_rate in learning_rate_choices:
         print("Bottleneck Value Choice: " + str(bottleneck_value))
         print("Batch Size: " + str(assigned_batch_size))
         print("Unfrozen Components: " + str(unfrozen_components))
+        print("Starting layer for adapters: " + str(starting_layer_for_adapters))
 
         # Gather train, dev, and test sets
         train_set_text, train_set_label = process_NER_dataset('ner/' + dataset + '/train.txt')

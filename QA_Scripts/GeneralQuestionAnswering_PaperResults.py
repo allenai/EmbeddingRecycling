@@ -70,7 +70,6 @@ class CustomBERTModel(nn.Module):
 
             if model_choice == "distilbert-base-uncased":
 
-                #print(self.encoderModel.__dict__)
                 print("Number of Layers: " + str(len(list(self.encoderModel.transformer.layer))))
 
                 layers_to_freeze = self.encoderModel.transformer.layer[:frozen_layer_count]
@@ -101,8 +100,6 @@ class CustomBERTModel(nn.Module):
 
             else:
 
-                #print(self.encoderModel.__dict__)
-
                 print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
 
                 layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
@@ -114,8 +111,9 @@ class CustomBERTModel(nn.Module):
 
           
           if frozen_embeddings == True:
+            
             print("Frozen Embeddings Layer")
-            #print(self.encoderModel.__dict__)
+            
             if model_choice == 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large':
                 for param in self.encoderModel.embeddings.parameters():
                     param.requires_grad = False
@@ -187,12 +185,7 @@ class CustomBERTModel(nn.Module):
         start_logits = classifier_output[:, :, 0]
         end_logits = classifier_output[:, :, 1]
 
-	    #print("final output")
-	    #print(classifier_output.shape)
-	    #print(start_logits.shape)
-	    #print(end_logits.shape)
-				
-        return {'start_logits': start_logits, 'end_logits': end_logits}
+	    return {'start_logits': start_logits, 'end_logits': end_logits}
 
 ##################################################
 
@@ -253,9 +246,6 @@ patience_value = 3 #10 #3
 current_dropout = True
 number_of_runs = 10 #1 #5
 frozen_choice = False
-#chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
-frozen_embeddings = False
 average_hidden_state = False
 
 assigned_batch_size = 8
@@ -265,7 +255,22 @@ validation_set_scoring = False
 
 warmup_steps_count_ratio = 0.2
 
+
+
+
+
+
+
+
+
+
 ############################################################
+# Select model and hyperparameters here
+############################################################
+
+learning_rate_for_each_dataset = [5e-5]
+frozen_layers = 0 # For freezing k-later layers of transformer model
+frozen_embeddings = False # For freezing input embeddings layer of transformer model
 
 #model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
@@ -276,14 +281,21 @@ model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #model_choice = 't5-small'
 #model_choice = "distilbert-base-uncased"
 
-learning_rate_for_each_dataset = [5e-5]
-
-#chosen_dataset = 'trivia_qa'
-#chosen_dataset = 'natural_questions'
-#chosen_dataset = "squad_v2"
-chosen_dataset = "squad"
+chosen_dataset = 'trivia_qa'
 
 ############################################################
+
+
+
+
+
+
+
+
+
+
+
+
 
 context_cutoff_count = 1024
 context_token_count = 512
@@ -339,7 +351,7 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 	print("--------------------------------------------------------------------------")
 
 	best_model_save_path = "best_checkpoints/qa/" + model_choice.replace("/","-") + "/"
-	#best_model_save_path += "Dataset_" + dataset + "_"
+	best_model_save_path += "Dataset_" + chosen_dataset + "_"
 	best_model_save_path += "chosen_learning_rate_" + str(chosen_learning_rate) + "_"
 	best_model_save_path += "frozen_layers_" + str(frozen_layers) + "_"
 	best_model_save_path += "frozen_embeddings_" + str(frozen_embeddings) + "_"

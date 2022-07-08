@@ -87,7 +87,7 @@ class CustomBERTModel(nn.Module):
                     for param in module.parameters():
                         param.requires_grad = False
 
-            elif model_choice == 't5-base' or model_choice == 't5-small' or model_choice == 'google/t5-v1_1-small':
+            elif model_choice in ['t5-base', 't5-small', 'google/t5-v1_1-small']:
 
                 print(self.encoderModel.__dict__)
 

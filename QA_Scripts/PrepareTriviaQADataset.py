@@ -212,9 +212,9 @@ def reformat_trivia_qa(examples):
 
 ########################################################################
 
-model_choice = 'roberta-large'
+#model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = "distilbert-base-uncased"
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #model_choice = "bert-base-uncased"
@@ -234,9 +234,9 @@ multi_answer = False
 
 remove_missing_answers = False
 
-reduced_sample = True
+reduced_sample = False
 
-only_preprocess_questions = True
+only_preprocess_questions = False
 
 chosen_dataset = "trivia_qa"
 #chosen_dataset = "natural_questions"

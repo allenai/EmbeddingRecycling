@@ -62,7 +62,7 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sciie-relation-extraction']
 #classification_datasets = ['mag']
 
-num_epochs = 100 #1000 #10
+num_epochs = 1000 #1000 #10
 patience_value = 10 #10 #3
 current_dropout = True
 number_of_runs = 10 #1 #5
@@ -76,12 +76,23 @@ validation_set_scoring = False
 assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
 
+
+
+
+
+
+
+
+############################################################
+# Select model and hyperparameters here
 ############################################################
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 
-chosen_learning_rate_choices = [1e-4]
-chosen_bottleneck_values = [256]
+chosen_learning_rate_choices = [1e-4, 1e-4, 1e-4] # Learning rate choices for the Chemprot, SciCite, 
+                                                  # and SciERC-Relation respectively
+chosen_bottleneck_values = [256, 256, 256] # Bottleneck dimension choices for the Chemprot, SciCite, 
+                                           # and SciERC-Relation respectively
 
 model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
@@ -89,6 +100,15 @@ model_choice = 'roberta-large'
 use_all_adapter = False
 
 ############################################################
+
+
+
+
+
+
+
+
+
 
 if model_choice == 'roberta-large':
 

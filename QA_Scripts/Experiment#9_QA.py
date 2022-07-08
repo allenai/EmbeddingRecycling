@@ -4,7 +4,7 @@
 import json
 from datasets import load_dataset, load_from_disk, DatasetDict, Dataset, load_metric
 from transformers import DefaultDataCollator, AutoTokenizer, get_scheduler, AutoModelForQuestionAnswering, AutoModelForSequenceClassification
-from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
+from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer, BertForSequenceClassification
 from tqdm import tqdm
 import torch.nn as nn
 from opendelta import AdapterModel, BitFitModel
@@ -37,19 +37,19 @@ class CustomBERTModel(nn.Module):
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
           if model_choice == "roberta-large":
 
-            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
+            model_encoding = BertForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
             self.encoderModel = model_encoding
 
           elif model_choice == "nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large":
 
-            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
+            model_encoding = BertForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 384
             self.encoderModel = model_encoding
 
           else:
 
-            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
+            model_encoding = BertForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 768
             self.encoderModel = model_encoding
 
@@ -221,10 +221,10 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-num_epochs = 5 #1000 #10
+num_epochs = 15 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
-number_of_runs = 1 #1 #5
+number_of_runs = 3 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
@@ -253,16 +253,19 @@ learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6] #1e-3, 3e-3,
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = "bert-base-uncased"
 #model_choice = 't5-small'
-model_choice = 'google/t5-v1_1-small'
+#model_choice = 'google/t5-v1_1-small'
+#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+model_choice = "distilbert-base-uncased"
 
-checkpoint_path = 'checkpoints/experiment9_QA_3000.pt'
+checkpoint_path = 'checkpoints/experiment9_QA_7002.pt'
 
 chosen_dataset = 'trivia_qa'
 #chosen_dataset = 'natural_questions'
 #chosen_dataset = "squad_v2"
 #chosen_dataset = "squad"
 
-use_all_adapter = True
+use_all_adapter = False
 
 context_cutoff_count = 1024
 context_token_count = 512
@@ -303,10 +306,20 @@ elif model_choice == 'allenai/scibert_scivocab_uncased' or model_choice == "bert
 		unfrozen_components.append(attention_adapter)
 		unfrozen_components.append(output_adapter)
 
-else:
+elif model_choice in ['nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large', 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large', 'distilbert-base-uncased']:
 
+	unfrozen_components = ['classifier']
 	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-	unfrozen_components = []
+
+	starting_layer_for_adapters = 3
+	if use_all_adapter == True:
+		starting_layer_for_adapters = 0
+
+	for i in range(starting_layer_for_adapters, 6):
+		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
+		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
+		unfrozen_components.append(attention_adapter)
+		unfrozen_components.append(output_adapter)
 
 ############################################################
 
