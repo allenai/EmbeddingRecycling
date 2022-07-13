@@ -1,7 +1,7 @@
 # Embedding Recycling
-Reusing Sequence Representations for Large Language Models
+Reusing Sequence Representations for Language Models
 
-Preprint on ArXiv: https://arxiv.org/abs/2207.04993
+Preprint on ArXiv: [Embedding Recycling for Language Models](https://arxiv.org/abs/2207.04993)
 
 ## Datasets
 
