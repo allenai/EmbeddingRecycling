@@ -1,6 +1,8 @@
 # Embedding Recycling
 Reusing Sequence Representations for Large Language Models
 
+Preprint on ArXiv: https://arxiv.org/abs/2207.04993
+
 ## Datasets
 
 To access our datasets using for text classification, please go to the folder titled `text_classification`. 
