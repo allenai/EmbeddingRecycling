@@ -1,5 +1,5 @@
 # Embedding Recycling
-Reusing Sequence Representations for Large Language Models
+Preprint on ArXiv: [Embedding Recycling for Language Models](https://arxiv.org/abs/2207.04993)
 
 ## Datasets
 
@@ -32,3 +32,18 @@ To replicate our results, use the conda environment listed above and run the fol
 The hyperparameters for replicating each experiment are included in the `HyperparameterSelection` folder. 
 
 ## Citing
+
+````
+@misc{https://doi.org/10.48550/arxiv.2207.04993,
+  doi = {10.48550/ARXIV.2207.04993},
+  url = {https://arxiv.org/abs/2207.04993},
+  author = {Saad-Falcon, Jon and Singh, Amanpreet and Soldaini, Luca and D'Arcy, Mike and Cohan, Arman and Downey, Doug},
+  keywords = {Computation and Language (cs.CL), FOS: Computer and information sciences, FOS: Computer and information sciences},
+  title = {Embedding Recycling for Language Models},
+  publisher = {arXiv},
+  year = {2022},
+  copyright = {Creative Commons Attribution 4.0 International}
+}
+````
+
+`EmbeddingRecycling` is an open-source project developed by the Allen Institute for Artificial Intelligence (AI2). AI2 is a non-profit institute with the mission to contribute to humanity through high-impact AI research and engineering.
