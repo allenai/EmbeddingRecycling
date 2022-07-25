@@ -41,6 +41,12 @@ class CustomBERTModel(nn.Module):
             embedding_size = 1024
             self.encoderModel = model_encoding
 
+          elif model_choice == "microsoft/deberta-v2-xlarge":
+
+            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
+            embedding_size = 1536
+            self.encoderModel = model_encoding
+
           elif model_choice == "nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large":
 
             model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
@@ -224,15 +230,15 @@ device = torch.device(device)
 num_epochs = 15 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
-number_of_runs = 10 #1 #5
+number_of_runs = 3 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 
-assigned_batch_size = 8
-gradient_accumulation_multiplier = 4
+assigned_batch_size = 4
+gradient_accumulation_multiplier = 8
 
 validation_set_scoring = False
 
@@ -249,31 +255,32 @@ validation_set_scoring = False
 ############################################################
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
-bottleneck_value = 64 # Bottleneck dimension choice
+bottleneck_value = 256 # Bottleneck dimension choice
 
 warmup_steps_count_ratio = 0.2
 
-learning_rate_for_each_dataset = [2e-4]
+learning_rate_for_each_dataset = [1e-4]
 
+model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'roberta-large'
-model_choice = "bert-base-uncased"
+#model_choice = "bert-base-uncased"
 
 chosen_dataset = 'trivia_qa'
 
-############################################################
-
-
-
-
-
-
-
-
-
+use_all_adapter = True
 
 ############################################################
 
-use_all_adapter = False
+
+
+
+
+
+
+
+
+
+############################################################
 
 context_cutoff_count = 1024
 context_token_count = 512
@@ -284,7 +291,7 @@ reduced_sample = False
 
 ############################################################
 
-if model_choice == 'roberta-large':
+if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
 
 	unfrozen_components = ['classifier']
 	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)

@@ -163,12 +163,10 @@ def tokenize_and_align_labels(examples):
 device = "cuda:0"
 device = torch.device(device)
 
-classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
-
-num_epochs = 1000 #1000 #10
-patience_value = 10 #10 #3
+num_epochs = 100 #1000 #10
+patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 10 #1 #5
+number_of_runs = 5 #1 #5
 frozen_choice = False
 average_hidden_state = False
 validation_set_scoring = False
@@ -190,14 +188,16 @@ gradient_accumulation_multiplier = 4
 frozen_layers = 0 # For freezing k-later layers of transformer model
 frozen_embeddings = False # For freezing input embeddings layer of transformer model
 
-learning_rate_for_each_dataset = [5e-5, 1e-5, 1e-4] # Learning rate choices for the bc5cdr, JNLPBA, 
+classification_datasets = ['NCBI-disease'] #['bc5cdr', 'JNLPBA', 'NCBI-disease']
+learning_rate_for_each_dataset = [5e-6] # Learning rate choices for the bc5cdr, JNLPBA, 
                                                     # and NCBI-disease respectively
 
+model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = "distilbert-base-uncased"
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 
 ############################################################
 
@@ -450,6 +450,17 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
                         for param in module.parameters():
                             param.requires_grad = False
 
+                elif model_choice == "microsoft/deberta-v2-xlarge":
+
+                    #print(model.__dict__)
+                    print("Number of Layers: " + str(len(list(model.deberta.encoder.layer))))
+                    print("Number of Layers to Freeze: " + str(frozen_layers))
+
+                    layers_to_freeze = model.deberta.encoder.layer[:frozen_layers]
+                    for module in layers_to_freeze:
+                        for param in module.parameters():
+                            param.requires_grad = False
+
                 else:
 
                     #print(model.__dict__)
@@ -461,6 +472,8 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
                         for param in module.parameters():
                             param.requires_grad = False
 
+
+
             if frozen_embeddings == True:
                 print("Frozen Embeddings Layer")
                 if model_choice == "distilbert-base-uncased":
@@ -468,6 +481,9 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
                         param.requires_grad = False
                 elif model_choice == 'allenai/scibert_scivocab_uncased':
                     for param in model.bert.embeddings.parameters():
+                        param.requires_grad = False
+                elif model_choice == "microsoft/deberta-v2-xlarge":
+                    for param in model.deberta.embeddings.parameters():
                         param.requires_grad = False
                 else:
                     for param in model.roberta.embeddings.parameters():

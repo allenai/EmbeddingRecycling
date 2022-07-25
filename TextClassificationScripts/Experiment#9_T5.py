@@ -1,8 +1,9 @@
 
 
 
+
 import torch.nn as nn
-from transformers import T5Tokenizer, T5EncoderModel, RobertaForSequenceClassification
+from transformers import T5Tokenizer, T5EncoderModel, RobertaForSequenceClassification, AutoModelForSeq2SeqLM
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer, AutoModelForSequenceClassification, BertForSequenceClassification
 import tensorflow as tf
 from opendelta import AdapterModel, BitFitModel
@@ -57,7 +58,7 @@ device = "cuda:0"
 device = torch.device(device)
 
 #classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
@@ -65,7 +66,7 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['mag']
 
 num_epochs = 100 #1000 #10
-patience_value = 10 #10 #3
+patience_value = 5 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
@@ -84,70 +85,42 @@ gradient_accumulation_multiplier = 4
 #learning_rate_choices = [0.001, 0.005, 0.0001, 0.0005, 1e-5, 5e-5] #1e-5
 #learning_rate_choices = [0.001, 0.003, 0.0002]
 
-learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]#[1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [5e-6]#[1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
 ############################################################
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 bottleneck_value = 256
 
-#model_choice = 'roberta-large'
-model_choice = "microsoft/deberta-v2-xlarge"
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#model_choice = "distilbert-base-uncased"
+model_choice = "google/t5-large-lm-adapt"
 
-checkpoint_path = 'checkpoints/experiment9_checkpoint17000.pt'
+checkpoint_path = 'checkpoints/experiment9_T5_checkpoint19000.pt'
 
 use_all_adapter = True
 
 ############################################################
 
-if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
+if model_choice in ["google/t5-large-lm-adapt"]:
 
-	unfrozen_components = ['classifier']
+	unfrozen_components = ['lm_head']
+	#unfrozen_components = []
 	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 	starting_layer_for_adapters = 12
 	if use_all_adapter == True:
 		starting_layer_for_adapters = 0
 
-	for i in range(starting_layer_for_adapters, 24):
-		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
-		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
-		unfrozen_components.append(attention_adapter)
-		unfrozen_components.append(output_adapter)
-
-elif model_choice == 'allenai/scibert_scivocab_uncased':
-
-	unfrozen_components = ['classifier']
-	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-	starting_layer_for_adapters = 6
-	if use_all_adapter == True:
-		starting_layer_for_adapters = 0
-
-	for i in range(starting_layer_for_adapters, 12):
-		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
-		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
-		unfrozen_components.append(attention_adapter)
-		unfrozen_components.append(output_adapter)
-
-elif model_choice in ['nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large', 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large', 'distilbert-base-uncased']:
-
-	unfrozen_components = ['classifier']
-	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-	starting_layer_for_adapters = 3
-	if use_all_adapter == True:
-		starting_layer_for_adapters = 0
-
 	#unfrozen_components.append('encoder')
 
-	for i in range(starting_layer_for_adapters, 12):
-		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
-		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
+	for i in range(starting_layer_for_adapters, 24):
+		attention_adapter = 'encoder.block.' + str(i) + ".layer.0.adapter"
+		output_adapter = 'encoder.block.' + str(i) + ".layer.1.adapter"
+		unfrozen_components.append(attention_adapter)
+		unfrozen_components.append(output_adapter)
+
+	for i in range(0, 24):
+		attention_adapter = 'decoder.block.' + str(i) + ".layer.0.adapter"
+		output_adapter = 'decoder.block.' + str(i) + ".layer.2.adapter"
 		unfrozen_components.append(attention_adapter)
 		unfrozen_components.append(output_adapter)
 
@@ -305,17 +278,12 @@ for chosen_learning_rate in learning_rate_choices:
 
 	        ############################################################
 
-	        model = AutoModelForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
+	        model = AutoModelForSeq2SeqLM.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
 	        #model = RobertaForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
 
-	        if delta_model_choice == 'BitFit':
-	            delta_model = BitFitModel(model)
-	            delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
-	            delta_model.log()
-	        elif delta_model_choice == 'Adapter':
-	            delta_model = AdapterModel(backbone_model=model, bottleneck_dim=bottleneck_value)
-	            delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
-	            delta_model.log()
+	        delta_model = AdapterModel(backbone_model=model, bottleneck_dim=bottleneck_value)
+	        delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
+	        delta_model.log()
 
 	        ############################################################
 
@@ -374,28 +342,19 @@ for chosen_learning_rate in learning_rate_choices:
 
 	                #with torch.no_grad():
 
-	                    #print("batch keys")
-	                    #print(batch.keys())
+	                    new_batch = {'input_ids': batch['input_ids'].to(device), 
+	                    			 'attention_mask': batch['attention_mask'].to(device),
+	                    			 'labels': batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)}
 
-	                    batch = {k: v.to(device) for k, v in batch.items()}
-	                    outputs = model(**batch)
-
-	                    #print('batch example')
-	                    #print(batch)
-
-				        #print(outputs.shape)
-				        #print(len(outputs['hidden_states']))
-				        #print(outputs['hidden_states'][0].shape)
-
-	                    loss = outputs.loss
+	                    loss = model(input_ids=new_batch['input_ids'], attention_mask=new_batch['attention_mask'], labels=new_batch['labels']).loss
 
 	                    loss.backward()
-	                    
+
 	                    gradient_accumulation_count += 1
 	                    if gradient_accumulation_count % (gradient_accumulation_multiplier) == 0:
-	                    	optimizer.step()
-	                    	lr_scheduler.step()
-	                    	optimizer.zero_grad()
+	                        optimizer.step()
+	                        lr_scheduler.step()
+	                        optimizer.zero_grad()
 	                    
 	                    progress_bar.update(1)
 	                    train_losses.append(loss.item())
@@ -408,17 +367,14 @@ for chosen_learning_rate in learning_rate_choices:
 
 	                #with torch.no_grad():
 
-	                    batch = {k: v.to(device) for k, v in batch.items()}
-	                    outputs = model(**batch)
+	                    new_batch = {'input_ids': batch['input_ids'].to(device), 
+	                    			 'attention_mask': batch['attention_mask'].to(device),
+	                    			 'labels': batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)}
 
-				        #print(outputs.shape)
-				        #print(len(outputs['hidden_states']))
-				        #print(outputs['hidden_states'][0].shape)
-
-	                    loss = outputs.loss
-	                    loss.backward()
+	                    loss = model(input_ids=new_batch['input_ids'], labels=new_batch['labels']).loss
 
 	                    progress_bar.update(1)
+
 	                    train_losses.append(loss.item())
 	                    valid_losses.append(loss.item())
 
@@ -482,15 +438,22 @@ for chosen_learning_rate in learning_rate_choices:
 
 	            with torch.no_grad():
 
-	                batch = {k: v.to(device) for k, v in batch.items()}
-	                outputs = model(**batch)
+	                inputs = batch['input_ids'].to(device)
+	                attention_mask = batch['attention_mask'].to(device)
+	                labels = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
+	                #decoder_attention_mask = batch['decoder_attention_mask'].to(device)
+
+	                outputs = model(input_ids=inputs,
+	                        		attention_mask=attention_mask,
+	                        		labels=labels)
+	                        		#decoder_attention_mask=b_target_mask)
 
 	                logits = outputs.logits
 	                predictions = torch.argmax(logits, dim=-1)
-	                metric.add_batch(predictions=predictions, references=batch["labels"])
+	                metric.add_batch(predictions=predictions, references=batch['labels'].to(device))
 
 	                total_predictions = torch.cat((total_predictions, predictions), 0)
-	                total_references = torch.cat((total_references, batch["labels"]), 0)
+	                total_references = torch.cat((total_references, batch['labels'].to(device)), 0)
 
 	                progress_bar.update(1)
 

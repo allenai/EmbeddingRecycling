@@ -62,10 +62,10 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sciie-relation-extraction']
 #classification_datasets = ['mag']
 
-num_epochs = 1000 #1000 #10
-patience_value = 10 #10 #3
+num_epochs = 100 #1000 #10
+patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 10 #1 #5
+number_of_runs = 5 #1 #5
 frozen_choice = False
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
@@ -89,13 +89,14 @@ gradient_accumulation_multiplier = 4
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 
-chosen_learning_rate_choices = [1e-4, 1e-4, 1e-4] # Learning rate choices for the Chemprot, SciCite, 
+chosen_learning_rate_choices = [1e-4, 2e-4, 2e-4] # Learning rate choices for the Chemprot, SciCite, 
                                                   # and SciERC-Relation respectively
 chosen_bottleneck_values = [256, 256, 256] # Bottleneck dimension choices for the Chemprot, SciCite, 
                                            # and SciERC-Relation respectively
 
-model_choice = 'roberta-large'
+#model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
+model_choice = "microsoft/deberta-v2-xlarge"
 
 use_all_adapter = False
 
@@ -110,7 +111,7 @@ use_all_adapter = False
 
 
 
-if model_choice == 'roberta-large':
+if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
 
 	unfrozen_components = ['classifier']
 	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -255,16 +256,16 @@ for chosen_learning_rate, bottleneck_value, dataset in zip(chosen_learning_rate_
 	    if validation_set_scoring == True:
 
 	        training_dataset_pandas = pd.DataFrame({'ner_tags': train_set_label, 'tokens': train_set_text})#[:1000]
-            training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
-            training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+	        training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
+	        training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
 
-            validation_dataset_pandas = pd.DataFrame({'ner_tags': dev_set_label, 'tokens': dev_set_text})#[:1000]
-            validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
-            validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
+	        validation_dataset_pandas = pd.DataFrame({'ner_tags': dev_set_label, 'tokens': dev_set_text})#[:1000]
+	        validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
+	        validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 
-            test_dataset_pandas = pd.DataFrame({'ner_tags': dev_set_label, 'tokens': dev_set_text})
-            test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
-            test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
+	        test_dataset_pandas = pd.DataFrame({'ner_tags': dev_set_label, 'tokens': dev_set_text})
+	        test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
+	        test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
 
 	    else:
 

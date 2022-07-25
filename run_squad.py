@@ -71,7 +71,7 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 def convertModelToAdaptersModel(current_model, sequence_classification_model, model_choice, bottleneck_value_choice, use_all_adapter):
 
-	if model_choice == 'roberta-large':
+	if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
 
 		unfrozen_components = ['classifier']
 
@@ -153,6 +153,20 @@ def freezeModel(current_model, model_type, freeze_layer_count):
 
         for param in current_model.distilbert.embeddings.parameters():
         	param.requires_grad = False
+
+        return current_model
+
+    else:
+
+        #print(current_model.__dict__)
+
+        layers_to_freeze = current_model.deberta.encoder.layer[:freeze_layer_count]
+        for module in layers_to_freeze:
+            for param in module.parameters():
+                param.requires_grad = False
+
+        for param in current_model.deberta.embeddings.parameters():
+            param.requires_grad = False
 
         return current_model
 

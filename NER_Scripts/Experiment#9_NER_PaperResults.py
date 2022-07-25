@@ -330,12 +330,12 @@ def tokenize_and_align_labels(examples):
 device = "cuda:0"
 device = torch.device(device)
 
-classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
+classification_datasets = ['NCBI-disease']
 
-num_epochs = 1000 #1000 #10
-patience_value = 10 #10 #3
+num_epochs = 100 #1000 #10
+patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 10 #1 #5
+number_of_runs = 5 #1 #5
 frozen_choice = False
 #chosen_learning_rate =  0.0001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
@@ -360,15 +360,18 @@ number_of_warmup_steps = 100
 # Select model and hyperparameters here
 ############################################################
 
-chosen_learning_rate_choices = [5e-5, 2e-5, 2e-4] # Learning rate choices for the bc5cdr, JNLPBA, 
+chosen_learning_rate_choices = [1e-4] # Learning rate choices for the bc5cdr, JNLPBA, 
                                                   # and NCBI-disease respectively
-chosen_bottleneck_values = [256, 64, 256] # Bottleneck dimension choices for the Chemprot, SciCite, 
+chosen_bottleneck_values = [256] # Bottleneck dimension choices for the Chemprot, SciCite, 
                                           # and SciERC-Relation respectively
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
  
-model_choice = 'roberta-large'
-#model_choice = 'allenai/scibert_scivocab_uncased'
+#model_choice = 'roberta-large'
+model_choice = 'allenai/scibert_scivocab_uncased'
+#model_choice = "microsoft/deberta-v2-xlarge"
+
+adapters_on_all_layers = True
 
 ############################################################
 
@@ -391,23 +394,31 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
 if model_choice == 'roberta-large':
 
-	unfrozen_components = ['classifier']
+    unfrozen_components = ['classifier']
 
-	for i in range(12, 24):
-		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
-		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
-		unfrozen_components.append(attention_adapter)
-		unfrozen_components.append(output_adapter)
+    starting_layer_for_adapters = 12
+    if adapters_on_all_layers == True:
+        starting_layer_for_adapters = 0
+
+    for i in range(starting_layer_for_adapters, 24):
+    	attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
+    	output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
+    	unfrozen_components.append(attention_adapter)
+    	unfrozen_components.append(output_adapter)
 
 elif model_choice == 'allenai/scibert_scivocab_uncased':
 
-	unfrozen_components = ['classifier']
+    unfrozen_components = ['classifier']
 
-	for i in range(6, 12):
-		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
-		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
-		unfrozen_components.append(attention_adapter)
-		unfrozen_components.append(output_adapter)
+    starting_layer_for_adapters = 6
+    if adapters_on_all_layers == True:
+        starting_layer_for_adapters = 0
+
+    for i in range(starting_layer_for_adapters, 12):
+    	attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
+    	output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
+    	unfrozen_components.append(attention_adapter)
+    	unfrozen_components.append(output_adapter)
 
 
 ############################################################
@@ -463,6 +474,7 @@ for chosen_learning_rate, bottleneck_value, dataset in zip(chosen_learning_rate_
         print("Number of Epochs: " + str(num_epochs))
         print("Bottleneck Value Choice: " + str(bottleneck_value))
         print("Batch Size: " + str(assigned_batch_size))
+        print("Adapters on All Layers: " + str(adapters_on_all_layers))
         print("Unfrozen Components: " + str(unfrozen_components))
 
         # Gather train, dev, and test sets

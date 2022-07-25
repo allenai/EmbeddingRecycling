@@ -2,7 +2,7 @@
 
 
 import torch.nn as nn
-from transformers import T5Tokenizer, T5EncoderModel, RobertaForSequenceClassification
+from transformers import T5Tokenizer, T5EncoderModel, RobertaForSequenceClassification, AutoModelForSeq2SeqLM
 from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer, AutoModelForSequenceClassification, BertForSequenceClassification
 import tensorflow as tf
 from opendelta import AdapterModel, BitFitModel
@@ -34,7 +34,7 @@ import random
 
 ############################################################
 
-random_state = 42
+random_state = 50
 
 np.random.seed(random_state)
 random.seed(random_state)
@@ -57,7 +57,7 @@ device = "cuda:0"
 device = torch.device(device)
 
 #classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['chemprot']
 #classification_datasets = ['sci-cite']
@@ -65,9 +65,9 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 #classification_datasets = ['mag']
 
 num_epochs = 100 #1000 #10
-patience_value = 10 #10 #3
+patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 1 #1 #5
+number_of_runs = 5 #1 #5
 frozen_choice = False
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
@@ -78,79 +78,77 @@ validation_set_scoring = False
 assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
 
-#learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
-#learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6]
 
-#learning_rate_choices = [0.001, 0.005, 0.0001, 0.0005, 1e-5, 5e-5] #1e-5
-#learning_rate_choices = [0.001, 0.003, 0.0002]
 
-learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]#[1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
 ############################################################
+
+# Change the starting
+
+classification_datasets = ['chemprot', 'sci-cite']
+learning_rate_choices = [1e-4, 1e-4]#[1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 bottleneck_value = 256
 
-#model_choice = 'roberta-large'
-model_choice = "microsoft/deberta-v2-xlarge"
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#model_choice = "distilbert-base-uncased"
-
-checkpoint_path = 'checkpoints/experiment9_checkpoint17000.pt'
+model_choice = "google/t5-large-lm-adapt"
 
 use_all_adapter = True
 
 ############################################################
 
-if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
 
-	unfrozen_components = ['classifier']
+
+
+
+if model_choice in ["google/t5-large-lm-adapt"]:
+
+	unfrozen_components = ['lm_head']
+	#unfrozen_components = []
 	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 	starting_layer_for_adapters = 12
 	if use_all_adapter == True:
 		starting_layer_for_adapters = 0
 
-	for i in range(starting_layer_for_adapters, 24):
-		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
-		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
-		unfrozen_components.append(attention_adapter)
-		unfrozen_components.append(output_adapter)
-
-elif model_choice == 'allenai/scibert_scivocab_uncased':
-
-	unfrozen_components = ['classifier']
-	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-	starting_layer_for_adapters = 6
-	if use_all_adapter == True:
-		starting_layer_for_adapters = 0
-
-	for i in range(starting_layer_for_adapters, 12):
-		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
-		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
-		unfrozen_components.append(attention_adapter)
-		unfrozen_components.append(output_adapter)
-
-elif model_choice in ['nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large', 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large', 'distilbert-base-uncased']:
-
-	unfrozen_components = ['classifier']
-	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-	starting_layer_for_adapters = 3
-	if use_all_adapter == True:
-		starting_layer_for_adapters = 0
-
 	#unfrozen_components.append('encoder')
 
-	for i in range(starting_layer_for_adapters, 12):
-		attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
-		output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
+	for i in range(starting_layer_for_adapters, 24):
+		attention_adapter = 'encoder.block.' + str(i) + ".layer.0.adapter"
+		output_adapter = 'encoder.block.' + str(i) + ".layer.1.adapter"
 		unfrozen_components.append(attention_adapter)
 		unfrozen_components.append(output_adapter)
 
+	for i in range(0, 24):
+		attention_adapter = 'decoder.block.' + str(i) + ".layer.0.adapter"
+		output_adapter = 'decoder.block.' + str(i) + ".layer.2.adapter"
+		unfrozen_components.append(attention_adapter)
+		unfrozen_components.append(output_adapter)
+
+
+############################################################
+
+dataset_folder_path = "paper_results_text_classification/"
+
+if not os.path.isdir(dataset_folder_path):
+
+	print("Creating folder: " + dataset_folder_path)
+	os.mkdir(dataset_folder_path)
+
+dataset_folder_path += model_choice.replace("/", "-") + "/"
+
+if not os.path.isdir(dataset_folder_path):
+
+    print("Creating folder: " + dataset_folder_path)
+    os.mkdir(dataset_folder_path)
+
+for dataset in classification_datasets:
+    try:
+        print("Making: " + dataset_folder_path + dataset)
+        os.mkdir(dataset_folder_path + dataset)
+    except:
+        print("Already exists")
+        print(dataset_folder_path + dataset)
 
 ############################################################
 
@@ -162,15 +160,11 @@ def tokenize_function(examples):
 
 learning_rate_to_results_dict = {}
 
-for chosen_learning_rate in learning_rate_choices:
+for chosen_learning_rate, dataset in zip(learning_rate_choices, classification_datasets):
 
-	print("--------------------------------------------------------------------------")
-	print("Starting new learning rate: " + str(chosen_learning_rate))
-	print("--------------------------------------------------------------------------")
-
-	current_learning_rate_results = {}
-
-	for dataset in classification_datasets:
+	    print("--------------------------------------------------------------------------")
+	    print("Starting new learning rate: " + str(chosen_learning_rate) + " for " + str(dataset))
+	    print("--------------------------------------------------------------------------")
 
 	    print("GPU Memory available at the start")
 	    print(get_gpu_memory())
@@ -183,7 +177,6 @@ for chosen_learning_rate in learning_rate_choices:
 	    print("Frozen Choice: " + str(frozen_choice))
 	    print("Number of Runs: " + str(number_of_runs))
 	    print('Learning Rate: ' + str(chosen_learning_rate))
-	    print("Checkpoint Path: " + checkpoint_path)
 	    print("Number of Frozen Layers: " + str(frozen_layers))
 	    print("Frozen Embeddings: " + str(frozen_embeddings))
 	    print("Patience: " + str(patience_value))
@@ -295,6 +288,10 @@ for chosen_learning_rate in learning_rate_choices:
 
 	    for i in range(0, number_of_runs):
 
+	        checkpoint_path = "paper_results_text_classification/" + model_choice.replace("/", "-") + "/" + dataset + "/experiment9_TC_" + str(chosen_learning_rate) + "_"
+	        checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
+	        checkpoint_path += str(validation_set_scoring) + "_Run_" + str(i) + ".pt"
+
 	        print("Loading Model")
 
 	        train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
@@ -305,17 +302,12 @@ for chosen_learning_rate in learning_rate_choices:
 
 	        ############################################################
 
-	        model = AutoModelForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
+	        model = AutoModelForSeq2SeqLM.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
 	        #model = RobertaForSequenceClassification.from_pretrained(model_choice, num_labels=len(set(train_set_label)))
 
-	        if delta_model_choice == 'BitFit':
-	            delta_model = BitFitModel(model)
-	            delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
-	            delta_model.log()
-	        elif delta_model_choice == 'Adapter':
-	            delta_model = AdapterModel(backbone_model=model, bottleneck_dim=bottleneck_value)
-	            delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
-	            delta_model.log()
+	        delta_model = AdapterModel(backbone_model=model, bottleneck_dim=bottleneck_value)
+	        delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
+	        delta_model.log()
 
 	        ############################################################
 
@@ -374,28 +366,19 @@ for chosen_learning_rate in learning_rate_choices:
 
 	                #with torch.no_grad():
 
-	                    #print("batch keys")
-	                    #print(batch.keys())
+	                    new_batch = {'input_ids': batch['input_ids'].to(device), 
+	                    			 'attention_mask': batch['attention_mask'].to(device),
+	                    			 'labels': batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)}
 
-	                    batch = {k: v.to(device) for k, v in batch.items()}
-	                    outputs = model(**batch)
-
-	                    #print('batch example')
-	                    #print(batch)
-
-				        #print(outputs.shape)
-				        #print(len(outputs['hidden_states']))
-				        #print(outputs['hidden_states'][0].shape)
-
-	                    loss = outputs.loss
+	                    loss = model(input_ids=new_batch['input_ids'], attention_mask=new_batch['attention_mask'], labels=new_batch['labels']).loss
 
 	                    loss.backward()
-	                    
+
 	                    gradient_accumulation_count += 1
 	                    if gradient_accumulation_count % (gradient_accumulation_multiplier) == 0:
-	                    	optimizer.step()
-	                    	lr_scheduler.step()
-	                    	optimizer.zero_grad()
+	                        optimizer.step()
+	                        lr_scheduler.step()
+	                        optimizer.zero_grad()
 	                    
 	                    progress_bar.update(1)
 	                    train_losses.append(loss.item())
@@ -408,17 +391,14 @@ for chosen_learning_rate in learning_rate_choices:
 
 	                #with torch.no_grad():
 
-	                    batch = {k: v.to(device) for k, v in batch.items()}
-	                    outputs = model(**batch)
+	                    new_batch = {'input_ids': batch['input_ids'].to(device), 
+	                    			 'attention_mask': batch['attention_mask'].to(device),
+	                    			 'labels': batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)}
 
-				        #print(outputs.shape)
-				        #print(len(outputs['hidden_states']))
-				        #print(outputs['hidden_states'][0].shape)
-
-	                    loss = outputs.loss
-	                    loss.backward()
+	                    loss = model(input_ids=new_batch['input_ids'], labels=new_batch['labels']).loss
 
 	                    progress_bar.update(1)
+
 	                    train_losses.append(loss.item())
 	                    valid_losses.append(loss.item())
 
@@ -482,15 +462,22 @@ for chosen_learning_rate in learning_rate_choices:
 
 	            with torch.no_grad():
 
-	                batch = {k: v.to(device) for k, v in batch.items()}
-	                outputs = model(**batch)
+	                inputs = batch['input_ids'].to(device)
+	                attention_mask = batch['attention_mask'].to(device)
+	                labels = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
+	                #decoder_attention_mask = batch['decoder_attention_mask'].to(device)
+
+	                outputs = model(input_ids=inputs,
+	                        		attention_mask=attention_mask,
+	                        		labels=labels)
+	                        		#decoder_attention_mask=b_target_mask)
 
 	                logits = outputs.logits
 	                predictions = torch.argmax(logits, dim=-1)
-	                metric.add_batch(predictions=predictions, references=batch["labels"])
+	                metric.add_batch(predictions=predictions, references=batch['labels'].to(device))
 
 	                total_predictions = torch.cat((total_predictions, predictions), 0)
-	                total_references = torch.cat((total_references, batch["labels"]), 0)
+	                total_references = torch.cat((total_references, batch['labels'].to(device)), 0)
 
 	                progress_bar.update(1)
 
@@ -538,103 +525,4 @@ for chosen_learning_rate in learning_rate_choices:
 	    print(get_gpu_memory())
 
 	    ############################################################
-
-	    current_learning_rate_results[dataset + "_micro_f1_average"] =  statistics.mean(micro_averages) * 100
-	    current_learning_rate_results[dataset + "_macro_f1_average"] =  statistics.mean(macro_averages) * 100
-
-	    if len(micro_averages) > 1:
-	    	current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages) * 100
-	    	current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages) * 100
-	    else:
-	    	current_learning_rate_results[dataset + "_micro_f1_std"] =  0
-	    	current_learning_rate_results[dataset + "_macro_f1_std"] =  0
-
-	############################################################
-    
-	learning_rate_to_results_dict[str(chosen_learning_rate)] = current_learning_rate_results
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-############################################################
-
-print("-----------------------------------------------------------------")
-print("Final Results: Best LR for each dataset")
-print("-----------------------------------------------------------------")
-
-dataset_to_best_lr_dict = {}
-
-for dataset in classification_datasets:
-
-    best_lr = learning_rate_choices[0]
-    best_combined_f1 = [0, 0]
-    best_combined_stds = [0, 0]
-
-    for chosen_learning_rate in learning_rate_choices:
-
-        current_combined_macro_micro_f1 = [learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_average"],
-                                           learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_average"]]
-
-        if sum(best_combined_f1) < sum(current_combined_macro_micro_f1):
-            best_lr = chosen_learning_rate
-            best_combined_f1 = current_combined_macro_micro_f1
-            best_combined_stds = [learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_micro_f1_std"],
-                                  learning_rate_to_results_dict[str(chosen_learning_rate)][dataset + "_macro_f1_std"]]
-
-    dataset_to_best_lr_dict[dataset] = {
-                                            'best_lr': best_lr,
-                                            'best_combined_f1': best_combined_f1,
-                                            'best_combined_stds': best_combined_stds
-                                       }
-
-    print("--------------------------------------------")
-    print("Results for " + dataset)
-    print("Best LR: " + str(dataset_to_best_lr_dict[dataset]['best_lr']))
-    print("Best Micro F1: " + str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][0]))
-    print("Best Macro F1: " + str(dataset_to_best_lr_dict[dataset]['best_combined_f1'][1]))
-    print("Micro StD: " + str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0]))
-    print("Macro StD: " + str(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1]))
-    print("--------------------------------------------")
-
-print("-----------------------------------------------------------------")
-print("Final Results for Spreadsheet")
-print("-----------------------------------------------------------------")
-print("Dataset: " + dataset)
-print("Model: " + model_choice)
-print("Number of Runs: " + str(number_of_runs))
-print("Number of Epochs: " + str(num_epochs))
-print("Patience: " + str(patience_value))
-print("Number of Frozen Layers: " + str(frozen_layers))
-print("Frozen Embeddings: " + str(frozen_embeddings))
-print("Validation Set Choice: " + str(validation_set_scoring))
-print("-----------------------------------------------------------------")
-
-print("Learning Rates")
-for dataset in classification_datasets:
-
-    print(str(dataset_to_best_lr_dict[dataset]['best_lr']))
-
-print("-----------------------------------------------------------------")
-print("Micro and Macro F1 Scores")
-for dataset in classification_datasets:
-
-    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_f1'][0], 2))) 
-    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_f1'][1], 2))) 
-
-print("-----------------------------------------------------------------")
-print("Micro and Macro StDs")
-for dataset in classification_datasets:
-
-    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0], 2))) 
-    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1], 2))) 
 

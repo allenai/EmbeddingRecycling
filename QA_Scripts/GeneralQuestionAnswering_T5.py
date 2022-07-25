@@ -1,4 +1,9 @@
 
+
+import torch.nn as nn
+from transformers import T5Tokenizer, T5EncoderModel, AutoModelForSequenceClassification, BertForSequenceClassification
+from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer, AutoModelForTokenClassification, T5ForConditionalGeneration
+
 import json
 from datasets import load_dataset, load_from_disk, DatasetDict, Dataset, load_metric
 from transformers import DefaultDataCollator, AutoTokenizer, get_scheduler, AutoModel
@@ -6,7 +11,7 @@ from transformers import AutoModelForQuestionAnswering, TrainingArguments, Train
 from tqdm import tqdm
 import torch.nn as nn
 from opendelta import AdapterModel, BitFitModel
-import tensorflow as tf
+#import tensorflow as tf
 
 from urllib.request import urlopen, Request
 
@@ -25,6 +30,23 @@ import os
 import time
 import statistics
 
+#############################################################
+
+random_state = 42
+
+np.random.seed(random_state)
+random.seed(random_state)
+torch.manual_seed(random_state)
+os.environ['PYTHONHASHSEED'] = str(random_state)
+
+############################################################
+
+def get_gpu_memory():
+    command = "nvidia-smi --query-gpu=memory.free --format=csv"
+    memory_free_info = sp.check_output(command.split()).decode('ascii').split('\n')[:-1][1:]
+    memory_free_values = [int(x.split()[0]) for i, x in enumerate(memory_free_info)]
+    return memory_free_values
+
 ############################################################
 
 class CustomBERTModel(nn.Module):
@@ -33,90 +55,21 @@ class CustomBERTModel(nn.Module):
 
           super(CustomBERTModel, self).__init__()
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
-          if model_choice == "roberta-large":
+          
+          model_encoding = T5ForConditionalGeneration.from_pretrained(model_choice, output_hidden_states=True)
+          embedding_size = 2048
+          self.encoderModel = model_encoding
 
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-            embedding_size = 1024
-            self.encoderModel = model_encoding
-
-          elif model_choice == "nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large":
-
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-            embedding_size = 384
-            self.encoderModel = model_encoding
-
-          elif model_choice == "t5-small" or model_choice == "google/t5-v1_1-small":
-
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-            embedding_size = 512
-            self.encoderModel = model_encoding
-
-          elif model_choice == "microsoft/deberta-v2-xlarge":
-
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-            embedding_size = 1536
-            self.encoderModel = model_encoding
-
-          else:
-
-            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
-            embedding_size = 768
-            self.encoderModel = model_encoding
-
-
-
-          if frozen == True:
-            print("Freezing the model parameters")
-            for param in self.encoderModel.parameters():
-                param.requires_grad = False
+          #print(self.encoderModel.__dict__)
 
 
 
           if frozen_layer_count > 0:
 
-            if model_choice == "distilbert-base-uncased":
-
-                #print(self.encoderModel.__dict__)
-                print("Number of Layers: " + str(len(list(self.encoderModel.transformer.layer))))
-
-                layers_to_freeze = self.encoderModel.transformer.layer[:frozen_layer_count]
-                for module in layers_to_freeze:
-                    for param in module.parameters():
-                        param.requires_grad = False
-
-            elif model_choice == 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large':
-
-                print("Number of Layers: " + str(len(list(self.encoderModel.roberta.encoder.layer))))
-
-                layers_to_freeze = self.encoderModel.roberta.encoder.layer[:frozen_layer_count]
-                for module in layers_to_freeze:
-                    for param in module.parameters():
-                        param.requires_grad = False
-
-            elif model_choice in ['t5-base', 't5-small', 'google/t5-v1_1-small']:
-
-                print(self.encoderModel.__dict__)
-
-                layers_to_freeze = self.encoderModel.encoder.block[:frozen_layer_count]
-                for module in layers_to_freeze:
-                    for param in module.parameters():
-                        param.requires_grad = False
-
-                #layers_to_freeze = self.encoderModel.decoder.block[:frozen_layer_count]
-                #for module in layers_to_freeze:
-                #    for param in module.parameters():
-                #        param.requires_grad = False
-
-            else:
-
-                #print(self.encoderModel.__dict__)
-
-                print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
-
-                layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
-                for module in layers_to_freeze:
-                    for param in module.parameters():
-                        param.requires_grad = False
+            layers_to_freeze = self.encoderModel.encoder.block[:frozen_layer_count]
+            for module in layers_to_freeze:
+                for param in module.parameters():
+                    param.requires_grad = False
 
 
 
@@ -124,24 +77,8 @@ class CustomBERTModel(nn.Module):
           if frozen_embeddings == True:
             print("Frozen Embeddings Layer")
             #print(self.encoderModel.__dict__)
-            if model_choice == 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large':
-                for param in self.encoderModel.roberta.embeddings.parameters():
-                    param.requires_grad = False
-
-            elif model_choice == 't5-base' or model_choice == 't5-small' or model_choice == 'google/t5-v1_1-small':
-
-                for param in self.encoderModel.shared.parameters():
-                    param.requires_grad = False
-
-                for param in self.encoderModel.encoder.embed_tokens.parameters():
-                    param.requires_grad = False
-
-                #for param in self.encoderModel.decoder.embed_tokens.parameters():
-                #    param.requires_grad = False
-
-            else:
-                for param in self.encoderModel.embeddings.parameters():
-                    param.requires_grad = False
+            for param in self.encoderModel.encoder.embed_tokens.parameters():
+                param.requires_grad = False
 
 
           
@@ -152,23 +89,15 @@ class CustomBERTModel(nn.Module):
 
           ############################################################################
 
-          if model_choice == "allenai/scibert_scivocab_uncased":
+          #self.dropout = nn.Dropout(p=0.1, inplace=False)
+          #self.classifier = nn.Linear(in_features=32128, out_features=2, bias=True) #32128
 
-            self.classifier = nn.Sequential(
-              								nn.Linear(in_features=embedding_size, out_features=2, bias=True)
-              							 )
-
-          elif model_choice == "roberta-large":
-
-          	self.classifier = nn.Sequential(
-              								nn.Linear(in_features=embedding_size, out_features=2, bias=True)
-              							 )
-
-          else:
-
-          	self.classifier = nn.Sequential(
-              								nn.Linear(in_features=embedding_size, out_features=2, bias=True)
-              							 )
+          self.classifier = nn.Sequential(
+          									#nn.Linear(in_features=32128, out_features=embedding_size, bias=True),
+          									#nn.Tanh(), 
+          									#nn.Linear(in_features=embedding_size, out_features=2, bias=True)
+          									nn.Linear(in_features=32128, out_features=2, bias=True),
+          								 )
 
 
 
@@ -176,33 +105,21 @@ class CustomBERTModel(nn.Module):
 
     def forward(self, input_ids, attention_mask, start_positions, end_positions, decoded_inputs=None, token_type_ids=None):
 
-        if model_choice == 't5-base' or model_choice == 't5-small' or model_choice == 'google/t5-v1_1-small':
+        last_hidden_state = self.encoderModel.encoder(input_ids, attention_mask)['last_hidden_state']
+        t5_layer_norm_output = self.encoderModel.decoder.final_layer_norm(last_hidden_state)
+        dropout_output = self.encoderModel.decoder.dropout(t5_layer_norm_output)
+        lm_head_output = self.encoderModel.lm_head(dropout_output)
 
-            if decoded_inputs == None:
-                print("Error with decoded_inputs!")
-
-            output_hidden_states = self.encoderModel(input_ids=input_ids, decoder_input_ids=decoded_inputs)#['last_hidden_state']
-            last_hidden_state = output_hidden_states['last_hidden_state']
-
-        else:
-
-            output_hidden_states = self.encoderModel(input_ids, attention_mask)['hidden_states']#['last_hidden_state']
-            last_hidden_state = output_hidden_states[len(output_hidden_states) - 1]
-
-	    ##################################################################
-
-        classifier_output = self.classifier(last_hidden_state)
+        classifier_output = self.classifier(lm_head_output)
+            
         start_logits = classifier_output[:, :, 0]
         end_logits = classifier_output[:, :, 1]
 
-	    #print("final output")
-	    #print(classifier_output.shape)
-	    #print(start_logits.shape)
-	    #print(end_logits.shape)
-				
         return {'start_logits': start_logits, 'end_logits': end_logits}
 
-##################################################
+
+
+############################################################
 
 def compute_f1(predictions_list, references_list):
 
@@ -243,20 +160,12 @@ def exact_match(predictions_list, references_list):
 
 ##################################################
 
-random_state = 42
-
-np.random.seed(random_state)
-random.seed(random_state)
-torch.manual_seed(random_state)
-os.environ['PYTHONHASHSEED'] = str(random_state)
-
-############################################################
 
 device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-num_epochs = 10 #1000 #10
+num_epochs = 15 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
@@ -282,25 +191,15 @@ warmup_steps_count_ratio = 0.2
 #learning_rate_choices = [1e-3, 3e-3, 1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 #learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 #learning_rate_choices = [1e-3, 2e-3, 5e-3, 1e-4, 2e-4, 5e-4]
-learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-3, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
-model_choice = "microsoft/deberta-v2-xlarge"
-#model_choice = 'roberta-large'
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#model_choice = "bert-base-uncased"
-#model_choice = 't5-base'
-#model_choice = 't5-small'
-#model_choice = 'google/t5-v1_1-small'
+model_choice = "google/t5-large-lm-adapt"
 
 
+checkpoint_path = 'checkpoints/T5_QA_13003.pt'
 
-checkpoint_path = 'checkpoints/general_QA_15003.pt'
-
-chosen_dataset = 'trivia_qa'
-#chosen_dataset = 'natural_questions'
-#chosen_dataset = "squad_v2"
-#chosen_dataset = "squad"
+#chosen_dataset = 'trivia_qa'
+chosen_dataset = 'squad'
 
 context_cutoff_count = 1024
 context_token_count = 512
@@ -309,10 +208,6 @@ remove_missing_answers = False
 
 reduced_sample = False
 
-
-
-
-
 ############################################################
 
 dataset_version = "./" + chosen_dataset + "_dataset_" + model_choice + "_" + str(context_cutoff_count) + "_" + str(context_token_count)
@@ -320,10 +215,6 @@ dataset_version += "_" + str(multi_answer) + "_" + str(remove_missing_answers) +
 
 triviaqa_dataset = load_from_disk(dataset_version)
 triviaqa_dataset.set_format("torch")
-
-################################################################
-
-lr_to_results = ""
 
 ################################################################
 
@@ -620,14 +511,6 @@ for chosen_learning_rate in learning_rate_choices:
 	print("Dataset Execution Run Time: " + str((time.time() - execution_start) / number_of_runs))
 	print("Epoch Average Time: " + str((time.time() - run_start) / total_epochs_performed))
 
-
-	lr_to_results += str(chosen_learning_rate) + "_" + str(chosen_dataset) + "_" + "\n"
-	lr_to_results += 'exact_match: ' + str(exact_matches_saved) + "\n"
-	lr_to_results += 'f1_scores_saved: ' + str(f1_scores_saved) + "\n"
-	lr_to_results += "-------------------------------------------" + "\n"
 	
 
 	############################################################
-
-with open(str(model_choice) + "_" + dataset + "_" + frozen_layers + ".txt", "w") as text_file:
-    text_file.write(lr_to_results)

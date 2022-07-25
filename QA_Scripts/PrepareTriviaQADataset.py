@@ -102,7 +102,7 @@ def preprocess_function_single_answer(examples):
 
     ############################################################
 
-    if model_choice == 't5-base' or model_choice == 't5-small' or model_choice == 'google/t5-v1_1-small':
+    if model_choice in ["google/t5-large-lm-adapt", 't5-base', 't5-small', 'google/t5-v1_1-small']:
 
         given_answers = [current_answer['text'][0] for current_answer in examples["answers"]]
 
@@ -112,6 +112,7 @@ def preprocess_function_single_answer(examples):
             truncation="only_second",
             return_offsets_mapping=True,
             padding="max_length",
+            max_length=16
         )
 
         inputs['decoded_inputs'] = decoded_inputs['input_ids']
@@ -191,10 +192,28 @@ def reformat_trivia_qa(examples):
 		if len(current_text) == 0:
 			current_context = "Error"
 
+
+
+
+		current_question = examples['question'][i]
+
+		if model_choice == "google/t5-large-lm-adapt":
+
+			if current_context != "Error":
+
+				question_prefix = "question: "
+				context_prefix = "context: "
+
+				current_question = question_prefix + current_question
+				current_context = context_prefix + current_context
+
+
+
+
 		ids.append(examples['question_id'][i])
 		titles.append("")
 		contexts.append(current_context)
-		questions.append(examples['question'][i])
+		questions.append(current_question)
 		answers.append(current_answers)
 
 	#################################################
@@ -212,9 +231,11 @@ def reformat_trivia_qa(examples):
 
 ########################################################################
 
+#model_choice = "microsoft/deberta-v2-xlarge"
+model_choice = "google/t5-large-lm-adapt"
 #model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
-model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
+#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = "distilbert-base-uncased"
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #model_choice = "bert-base-uncased"
@@ -238,10 +259,10 @@ reduced_sample = False
 
 only_preprocess_questions = False
 
-chosen_dataset = "trivia_qa"
+#chosen_dataset = "trivia_qa"
 #chosen_dataset = "natural_questions"
 #chosen_dataset = "squad_v2"
-#chosen_dataset = "squad"
+chosen_dataset = "squad"
 
 #squad = load_dataset('squad')
 

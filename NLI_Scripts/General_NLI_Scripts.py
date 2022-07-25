@@ -31,6 +31,8 @@ from sklearn.model_selection import train_test_split
 import json
 import random
 
+from datasets import load_dataset, concatenate_datasets
+
 #############################################################
 
 random_state = 42
@@ -150,12 +152,10 @@ class CustomBERTModel(nn.Module):
           
           if frozen_embeddings == True:
 
-            if model_choice != "google/t5-large-lm-adapt":
-
-                print("Frozen Embeddings Layer")
-                #print(self.encoderModel.__dict__)
-                for param in self.encoderModel.embeddings.parameters():
-                    param.requires_grad = False
+            print("Frozen Embeddings Layer")
+            #print(self.encoderModel.__dict__)
+            for param in self.encoderModel.embeddings.parameters():
+                param.requires_grad = False
 
 
 
@@ -164,17 +164,30 @@ class CustomBERTModel(nn.Module):
           ### New layers:
 
           if mlp_classifier == True:
-            self.classifier = nn.Sequential(
-                                                    nn.Linear(embedding_size, embedding_size),
-                                                    nn.Tanh(),
-                                                    nn.Linear(embedding_size, number_of_labels)
-                                                 )
-          else:
-            self.classifier = nn.Sequential(
-                                                    nn.Linear(embedding_size, 256),
-                                                    nn.Linear(256, number_of_labels)
-                                                 )
 
+              if current_dropout == True:
+
+                  self.classifier = nn.Sequential(
+                  									nn.Dropout(p=0.1),
+                  									nn.Linear(embedding_size, embedding_size),
+                  									nn.Tanh(),
+                  									nn.Linear(embedding_size, number_of_labels)
+                  								)
+
+              else:
+
+                  self.classifier = nn.Sequential(
+                  									nn.Linear(embedding_size, embedding_size),
+                  									nn.Tanh(),
+                  									nn.Linear(embedding_size, number_of_labels)
+                  								 )
+
+          else:
+
+              self.classifier = nn.Sequential(
+              									nn.Linear(embedding_size, 256),
+              									nn.Linear(256, number_of_labels)
+              								 )
 
           #self.linear1 = nn.Linear(embedding_size, 256)
           #self.linear2 = nn.Linear(256, number_of_labels)
@@ -201,12 +214,9 @@ class CustomBERTModel(nn.Module):
 
         sequence_output = total_output['last_hidden_state']
 
-        #linear1_output = self.linear1(sequence_output[:,0,:].view(-1, self.embedding_size))
-        #linear2_output = self.linear2(linear1_output)
+        classifier_output = self.classifier(sequence_output[:,0,:].view(-1, self.embedding_size))
 
-        linear2_output = self.classifier(sequence_output[:,0,:].view(-1, self.embedding_size))
-
-        return linear2_output
+        return classifier_output
 
 
 
@@ -216,111 +226,67 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-classification_datasets = ['chemprot', 'sci-cite', "sciie-relation-extraction"] #["sciie-relation-extraction", "mag"]
+nli_datasets = ['mnli'] #['mnli', 'qnli']
 
-num_epochs = 100 #1000 #10
-patience_value = 5 #10 #3
-current_dropout = True
+num_epochs = 10 #1000 #10
+patience_value = 10 #10 #3
 number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 12 #12 layers for BERT total, 24 layers for T5 and RoBERTa, 48 for DeBERTa XXL
-frozen_embeddings = True
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa, 48 for DeBERTa XXL
+frozen_embeddings = False
 average_hidden_state = False
 
 validation_set_scoring = True
-assigned_batch_size = 8
-gradient_accumulation_multiplier = 4
+assigned_batch_size = 32
+gradient_accumulation_multiplier = 1
 
-num_warmup_steps = 100
+num_warmup_steps_ratio = 0.06
 
 #learning_rate_choices = [2e-5]
-learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-5, 2e-5, 3e-5, 5e-5, 5e-6]
 #learning_rate_choices = [3e-5, 4e-5, 5e-5, 6e-5]
 
-mlp_classifier = False
-
 ############################################################
- 
-#model_choice = "t5-3b"
-#tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
 
-model_choice = "microsoft/deberta-v3-large"
+use_paper_settings = True
+current_dropout = False
+
+mlp_classifier = False
+ 
+model_choice = 'bert-base-uncased'
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-#model_choice = 'bert-base-uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'allenai/scibert_scivocab_uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'roberta-large'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'microsoft/deberta-v3-small'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'microsoft/deberta-v3-xsmall'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'distilroberta-base'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'sentence-transformers/sentence-t5-base'
-#tokenizer = SentenceTransformer(model_choice, device='cuda').tokenizer 
-
-#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = "distilbert-base-uncased"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = "t5-small"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = "EleutherAI/gpt-neo-1.3B"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-#tokenizer.pad_token = tokenizer.eos_token
-
-#model_choice = "google/t5-xl-lm-adapt"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-
-#model_choice = "microsoft/deberta-v2-xxlarge"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-
-#model_choice = "microsoft/deberta-v2-xlarge"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-
-#model_choice = "google/t5-large-lm-adapt"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-
-#tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-#model_encoding = AutoModel.from_pretrained(model_choice)
-#embedding_size = 4096
-
-
+if use_paper_settings:
+	chosen_weight_decay = 0.01 # Default: 0
+	chosen_epsilon = 1e-6
+	chosen_betas = (0.9, 0.98)
+else:
+	chosen_weight_decay = 0 # Default: 0
+	chosen_epsilon = 1e-8
+	chosen_betas = (0.9, 0.999)
 
 ############################################################
 
-def tokenize_function(examples):
+def tokenize_function_mnli(examples):
 
-    return tokenizer(examples["text"], padding="max_length", truncation=True)#.input_ids
+    return tokenizer(examples["premise"], examples["hypothesis"], padding="max_length", truncation=True)#.input_ids
 
 ############################################################
 
-dataset_folder_path = "checkpoints/" + model_choice.replace("/", "-")
+def tokenize_function_qnli(examples):
+
+    return tokenizer(examples["question"], examples["sentence"], padding="max_length", truncation=True)#.input_ids
+
+############################################################
+
+dataset_folder_path = "checkpoints/nli_" + model_choice.replace("/", "-")
 if not os.path.isdir(dataset_folder_path):
 
     print("Creating folder: " + dataset_folder_path)
     os.mkdir(dataset_folder_path)
 
-for dataset in classification_datasets:
+for dataset in nli_datasets:
     try:
         os.mkdir(dataset_folder_path + "/" + dataset)
     except:
@@ -339,11 +305,11 @@ for chosen_learning_rate in learning_rate_choices:
 
     current_learning_rate_results = {}
 
-    for dataset in classification_datasets:
+    for dataset in nli_datasets:
 
-        checkpoint_path = "checkpoints/" + model_choice.replace("/", "-") + "/" + dataset + "/" + str(chosen_learning_rate) + "_"
+        checkpoint_path = "checkpoints/nli_" + model_choice.replace("/", "-") + "/" + dataset + "/" + str(chosen_learning_rate) + "_"
         checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
-        checkpoint_path += str(validation_set_scoring) + "_" + str(mlp_classifier) + ".pt"
+        checkpoint_path += str(validation_set_scoring) + "_" + str(current_dropout) + "_" + str(mlp_classifier) + ".pt"
 
         print("GPU Memory available at the start")
         print(get_gpu_memory())
@@ -372,100 +338,39 @@ for chosen_learning_rate in learning_rate_choices:
         print("Average Hidden Layers: " + str(average_hidden_state))
         print("Validation Set Choice: " + str(validation_set_scoring))
         print("Number of Epochs: " + str(num_epochs))
-        print("Number of warmup steps: " + str(num_warmup_steps))
+        print("Number of warmup steps: " + str(num_warmup_steps_ratio))
         print("MLP Classifier: " + str(mlp_classifier))
-
-        # Chemprot train, dev, and test
-        with open('text_classification/' + dataset + '/train.txt') as f:
-
-            train_set = f.readlines()
-            train_set = [ast.literal_eval(line) for line in train_set]
-            train_set_text = [line['text'] for line in train_set]
-            train_set_label = [line['label'] for line in train_set]
-
-        with open('text_classification/' + dataset + '/dev.txt') as f:
-            
-            dev_set = f.readlines()
-            dev_set = [ast.literal_eval(line) for line in dev_set]
-
-            dev_set_text = []
-            dev_set_label = []
-            for line in dev_set:
-
-                # Fix bug in MAG dev where there is a single label called "category"
-                if line['label'] != 'category':
-                    dev_set_text.append(line['text'])
-                    dev_set_label.append(line['label'])
-                else:
-                    print("Found the error with category")
-
-        with open('text_classification/' + dataset + '/test.txt') as f:
-            
-            test_set = f.readlines()
-            test_set = [ast.literal_eval(line) for line in test_set]
-            test_set_text = [line['text'] for line in test_set]
-            test_set_label = [line['label'] for line in test_set]
-
+        print("Paper Settings: " + str(use_paper_settings))
 
         ############################################################
 
-        labels_list = sorted(list(set(train_set_label)))
+        nli_dataset = load_dataset("glue", dataset)
 
-        label_to_value_dict = {}
+        if dataset == "mnli":
 
-        count = 0
-        for label in labels_list:
-          label_to_value_dict[label] = count
-          count += 1
+            nli_dataset['validation'] = concatenate_datasets([nli_dataset['validation_matched'], nli_dataset['validation_mismatched']])
+            nli_dataset['test'] = concatenate_datasets([nli_dataset['test_matched'], nli_dataset['test_mismatched']])
 
-        train_set_label = [label_to_value_dict[label] for label in train_set_label]
-        dev_set_label = [label_to_value_dict[label] for label in dev_set_label]
-        test_set_label = [label_to_value_dict[label] for label in test_set_label]
+            for data_slice in ["validation_matched", "validation_mismatched", "test_matched", "test_mismatched"]:
+            	nli_dataset.pop(data_slice)
 
-        ############################################################
+            nli_dataset = nli_dataset.shuffle(seed=random_state)
 
-        if validation_set_scoring == True:
+            tokenized_datasets = nli_dataset.map(tokenize_function_mnli, batched=True)
 
-            training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:100]
-            training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
-            training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
+            tokenized_datasets = tokenized_datasets.remove_columns(["hypothesis", "premise"])
+            tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
+            tokenized_datasets.set_format("torch")
 
-            validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:100]
-            validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
-            validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
+        elif dataset == "qnli":
 
-            test_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})
-            test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
-            test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
+            nli_dataset = nli_dataset.shuffle(seed=random_state)
 
-        else:
+            tokenized_datasets = nli_dataset.map(tokenize_function_qnli, batched=True)
 
-            training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
-            training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
-            training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
-
-            validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
-            validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
-            validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
-
-            test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
-            test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
-            test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
-
-
-        ############################################################
-
-
-        classification_dataset = datasets.DatasetDict({'train' : training_dataset_arrow, 
-                                        'validation': validation_dataset_arrow, 
-                                        'test' : test_dataset_arrow})
-        tokenized_datasets = classification_dataset.map(tokenize_function, batched=True)
-
-
-        tokenized_datasets = tokenized_datasets.remove_columns(["text"])
-        tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
-        tokenized_datasets.set_format("torch")
-
+            tokenized_datasets = tokenized_datasets.remove_columns(["question", "sentence"])
+            tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
+            tokenized_datasets.set_format("torch")
 
         ############################################################
 
@@ -479,15 +384,29 @@ for chosen_learning_rate in learning_rate_choices:
 
             print("Loading Model")
 
-            train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
-            validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
-            eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
+            if validation_set_scoring == True:
 
-            print("Number of labels: " + str(len(set(train_set_label))))
+                #new_validation, new_test = train_test_split(tokenized_datasets['validation'], test_size=0.9, random_state=random_state)
+
+                train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
+                validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
+                eval_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
+
+            else:
+
+                train_dataloader = DataLoader(tokenized_datasets['train'], batch_size=assigned_batch_size)
+                validation_dataloader = DataLoader(tokenized_datasets['validation'], batch_size=assigned_batch_size)
+                eval_dataloader = DataLoader(tokenized_datasets['test'], batch_size=assigned_batch_size)
 
             ############################################################
 
-            model = CustomBERTModel(len(set(train_set_label)), model_choice, current_dropout, 
+            train_set_label = len(set(tokenized_datasets['train']["labels"].tolist()))
+
+            print("Number of labels: " + str(train_set_label))
+
+            ############################################################
+
+            model = CustomBERTModel(train_set_label, model_choice, current_dropout, 
                                     frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings)
 
             model.to(device)
@@ -498,13 +417,14 @@ for chosen_learning_rate in learning_rate_choices:
             #optimizer = AdamW(model.parameters(), lr=5e-5)
 
             criterion = nn.CrossEntropyLoss()
-            optimizer = Adam(model.parameters(), lr=chosen_learning_rate) #5e-6
+            optimizer = Adam(model.parameters(), lr=chosen_learning_rate, 
+            				 weight_decay=chosen_weight_decay, eps=chosen_epsilon, betas=chosen_betas) #5e-6
             #optimizer = Adam(model.parameters(), lr=1e-5) #5e-6
 
             num_training_steps = num_epochs * len(train_dataloader)
 
             lr_scheduler = get_scheduler(
-                name="linear", optimizer=optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps
+                name="linear", optimizer=optimizer, num_warmup_steps=int(num_training_steps * num_warmup_steps_ratio), num_training_steps=num_training_steps
             )
 
             ############################################################
@@ -549,19 +469,11 @@ for chosen_learning_rate in learning_rate_choices:
                 for batch in train_dataloader:
 
                     #with torch.no_grad():
+
+                        new_batch = {"ids": batch['input_ids'].to(device), 
+                        			 "mask": batch['attention_mask'].to(device)}
                     
-                        #batch = {k: v.to(device) for k, v in batch.items()}
-
-                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-
-                        if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
-                            new_batch['decoder_input_ids'] = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
-
                         outputs = model(**new_batch)
-
-                        #print("Example outputs")
-                        #print(outputs)
-                        #print(labels)
 
                         loss = criterion(outputs, batch['labels'].to(device))
 
@@ -584,14 +496,9 @@ for chosen_learning_rate in learning_rate_choices:
 
                     #with torch.no_grad():
                     
-                        #batch = {k: v.to(device) for k, v in batch.items()}
-                        #labels = batch['labels']
-
-                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-
-                        if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
-                            new_batch['decoder_input_ids'] = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
-                        
+                        new_batch = {"ids": batch['input_ids'].to(device), 
+                        			 "mask": batch['attention_mask'].to(device)}
+                    
                         outputs = model(**new_batch)
 
                         loss = criterion(outputs, batch['labels'].to(device))
@@ -659,14 +566,10 @@ for chosen_learning_rate in learning_rate_choices:
 
                 with torch.no_grad():
 
-                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-
-                    if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
-                        new_batch['decoder_input_ids'] = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
-
+                    new_batch = {"ids": batch['input_ids'].to(device), 
+                        	     "mask": batch['attention_mask'].to(device)}
+                    
                     outputs = model(**new_batch)
-
-                    #labels = batch['labels'].to(device)
 
                     logits = outputs
                     predictions = torch.argmax(logits, dim=-1)
@@ -901,7 +804,4 @@ for dataset in classification_datasets:
 
     print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0], 2))) 
     print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1], 2))) 
-
-
-
 

@@ -37,7 +37,7 @@ class CustomBERTModel(nn.Module):
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
           if model_choice == "roberta-large":
 
-            model_encoding = BertForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
+            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
             self.encoderModel = model_encoding
 
@@ -45,6 +45,12 @@ class CustomBERTModel(nn.Module):
 
             model_encoding = BertForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 384
+            self.encoderModel = model_encoding
+
+          elif model_choice == "microsoft/deberta-v2-xlarge":
+
+            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
+            embedding_size = 1536
             self.encoderModel = model_encoding
 
           else:
@@ -224,17 +230,17 @@ device = torch.device(device)
 num_epochs = 15 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
-number_of_runs = 3 #1 #5
+number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
 average_hidden_state = False
 
-assigned_batch_size = 8
-gradient_accumulation_multiplier = 4
+assigned_batch_size = 4
+gradient_accumulation_multiplier = 8
 
-validation_set_scoring = True
+validation_set_scoring = False
 
 
 
@@ -244,10 +250,13 @@ validation_set_scoring = True
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 bottleneck_value = 256
 
+use_all_adapter = True
+
 warmup_steps_count_ratio = 0.2
 #learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
-learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6] #1e-3, 3e-3, 
+learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6] #1e-3, 3e-3, 
 
+model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
@@ -256,16 +265,14 @@ learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6] #1e-3, 3e-3,
 #model_choice = 'google/t5-v1_1-small'
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-model_choice = "distilbert-base-uncased"
+#model_choice = "distilbert-base-uncased"
 
-checkpoint_path = 'checkpoints/experiment9_QA_7002.pt'
+checkpoint_path = 'checkpoints/experiment9_QA_20000.pt'
 
 chosen_dataset = 'trivia_qa'
 #chosen_dataset = 'natural_questions'
 #chosen_dataset = "squad_v2"
 #chosen_dataset = "squad"
-
-use_all_adapter = False
 
 context_cutoff_count = 1024
 context_token_count = 512
@@ -276,7 +283,7 @@ reduced_sample = False
 
 ############################################################
 
-if model_choice == 'roberta-large':
+if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
 
 	unfrozen_components = ['classifier']
 	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)

@@ -1,0 +1,19 @@
+
+version: v2
+description: EmbeddingRecycling
+tasks:
+  # We only have one step in our experiment, so there's only one entry in this list
+  - name: training
+    image:
+      # You will want to replace `username` below with your Beaker username
+      beaker: jons/EmbeddingRecycling
+    command: [python, -u, GeneralQuestionAnswering.py]
+    result:
+      # Beaker will capture anything that's written to this location and store it in the results
+      # dataset.
+      path: /output
+    resources:
+      gpuCount: 1
+    context:
+      cluster: ai2/mosaic-cirrascale
+      priority: preemptible

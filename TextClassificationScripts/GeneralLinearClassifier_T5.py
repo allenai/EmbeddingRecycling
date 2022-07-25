@@ -63,8 +63,8 @@ current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa, 48 for DeBERTa XXL
-frozen_embeddings = False
+frozen_layers = 12 #12 layers for BERT total, 24 layers for T5 and RoBERTa, 48 for DeBERTa XXL
+frozen_embeddings = True
 average_hidden_state = False
 
 validation_set_scoring = False
@@ -74,7 +74,7 @@ gradient_accumulation_multiplier = 8
 num_warmup_steps = 100
 
 #learning_rate_choices = [2e-5]
-learning_rate_choices = [1e-3, 5e-3, 1e-4, 5e-4]#[1e-3, 5e-3, 1e-4, 5e-4, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6] #[1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]#[1e-3, 5e-3, 1e-4, 5e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 #learning_rate_choices = [3e-5, 4e-5, 5e-5, 6e-5]
 
 ############################################################
