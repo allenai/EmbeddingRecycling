@@ -166,7 +166,7 @@ device = torch.device(device)
 num_epochs = 15 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
-number_of_runs = 1 #1 #5
+number_of_runs = 3 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
@@ -177,6 +177,8 @@ assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
 
 validation_set_scoring = False
+
+############################################################
 
 
 
@@ -189,17 +191,21 @@ bottleneck_value = 256
 use_all_adapter = True
 
 warmup_steps_count_ratio = 0.2
-#learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
-learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6] #1e-3, 3e-3, 
+learning_rate_choices = [1e-4] [0.0001, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
 model_choice = "google/t5-large-lm-adapt"
 
-checkpoint_path = 'checkpoints/experiment9_QA_T5_20001.pt'
+checkpoint_path = 'checkpoints/experiment9_QA_T5_30001.pt'
 
 chosen_dataset = 'trivia_qa'
-#chosen_dataset = 'natural_questions'
-#chosen_dataset = "squad_v2"
-#chosen_dataset = "squad"
+
+############################################################
+
+
+
+
+
+############################################################
 
 context_cutoff_count = 1024
 context_token_count = 512
@@ -244,6 +250,8 @@ triviaqa_dataset = load_from_disk(dataset_version)
 triviaqa_dataset.set_format("torch")
 
 ################################################################
+
+results_string = ""
 
 for chosen_learning_rate in learning_rate_choices:
 
@@ -537,6 +545,9 @@ for chosen_learning_rate in learning_rate_choices:
 	    f1_scores_saved.append(round(f1_score * 100, 2))
 	    exact_matches_saved.append(round(exact_match_score * 100, 2))
 
+	    results_string += "Exact Match: " + str(round(exact_match_score * 100, 2)) + "\n"
+	    results_string += "F1-Score: " + str(round(f1_score * 100, 2)) + "\n"
+
 
 	print('exact_match: ' + str(exact_matches_saved))
 	print("Exact Match Average: " + str(statistics.mean(exact_matches_saved)))
@@ -556,3 +567,11 @@ for chosen_learning_rate in learning_rate_choices:
 	
 
 	############################################################
+
+checkpoint_path = "Experiment#9_QA_T5_Trivia_QA_" + model_choice.replace("/", "-") + "_" + str(chosen_learning_rate) + "_"
+checkpoint_path += str(use_all_adapter) + ".txt"
+
+with open(checkpoint_path, "w") as text_file:
+    text_file.write(results_string)
+
+

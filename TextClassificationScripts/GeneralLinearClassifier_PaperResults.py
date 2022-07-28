@@ -188,8 +188,8 @@ gradient_accumulation_multiplier = 8
 # Select model and hyperparameters here
 ############################################################
 
-classification_datasets = ['sciie-relation-extraction']
-learning_rate_for_each_dataset = [1e-5] # Learning rate choices for the Chemprot, SciCite, 
+classification_datasets = ['chemprot', 'sci-cite', "sciie-relation-extraction"]
+learning_rate_for_each_dataset = [1e-5, 1e-5, 1e-5] # Learning rate choices for the Chemprot, SciCite, 
                                                     # and SciERC-Relation respectively
 
 frozen_layers = 0 # For freezing k-later layers of transformer model
@@ -210,7 +210,7 @@ model_choice = "microsoft/deberta-v2-xlarge"
 
 
 
-
+############################################################
 
 tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 

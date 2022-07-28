@@ -261,20 +261,33 @@ validation_set_scoring = False
 
 number_of_warmup_steps = 100
 
-########################################################################################
+############################################################
+
+
+
+
+
+############################################################
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 bottleneck_value = 256
 
 classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
-learning_rate_choices = [5e-6, 1e-5, 5e-5]
+learning_rate_choices = [1e-5, 1e-5, 1e-5]
 
-use_all_adapter = False
+use_all_adapter = True
 
 model_choice = "google/t5-large-lm-adapt"
 
 assigned_batch_size = 32
 tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
+
+############################################################
+
+
+
+
+
 
 ############################################################
 
@@ -328,6 +341,8 @@ for dataset in classification_datasets:
         print(dataset_folder_path + dataset)
 
 ############################################################
+
+results_string = ""
 
 learning_rate_to_results_dict = {}
 
@@ -676,6 +691,9 @@ for chosen_learning_rate, dataset in zip(learning_rate_choices, classification_d
             micro_averages.append(micro_f_1_results['f1'] * 100)
             macro_averages.append(macro_f_1_results['f1'] * 100)
 
+            results_string += "Micro F1: " + str(micro_f_1_results['f1']) + "\n"
+            results_string += "Macro F1: " + str(macro_f_1_results['f1']) + "\n"
+
 
         print("Processing " + dataset + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
         print('micro_averages: ' + str(micro_averages))
@@ -696,5 +714,15 @@ for chosen_learning_rate, dataset in zip(learning_rate_choices, classification_d
         print(get_gpu_memory())
 
         ############################################################
+
+
+
+
+checkpoint_path = "Experiment#9_NER_T5_" + model_choice.replace("/", "-") + "_" + str(chosen_learning_rate) + "_"
+checkpoint_path += str(use_all_adapter) + ".txt"
+
+with open(checkpoint_path, "w") as text_file:
+    text_file.write(results_string)
+
 
 

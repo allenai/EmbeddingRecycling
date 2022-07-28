@@ -363,12 +363,16 @@ frozen_embeddings = False
 average_hidden_state = False
 validation_set_scoring = False
 
-#learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]#[0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
-#learning_rate_choices = [0.001, 0.003, 0.0002]
-learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6]
-#learning_rate_choices = [1e-3, 2e-3, 5e-3]
+learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
-########################################################################################
+############################################################
+
+
+
+
+
+
+############################################################
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 bottleneck_value = 256
@@ -388,6 +392,12 @@ checkpoint_path = 'checkpoints/experiment9_ner_50000.pt'
 assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
 tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
+
+############################################################
+
+
+
+
 
 ############################################################
 

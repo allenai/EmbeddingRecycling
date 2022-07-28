@@ -68,6 +68,12 @@ class CustomBERTModel(nn.Module):
             embedding_size = 384
             self.encoderModel = model_encoding
 
+          elif model_choice == "microsoft/deberta-v2-xlarge":
+
+            model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
+            embedding_size = 1536
+            self.encoderModel = model_encoding
+
           else:
 
             model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
@@ -186,6 +192,20 @@ class CustomBERTModel(nn.Module):
                 embeddings = self.encoderModel.roberta.embeddings(ids)
                 extended_attention_mask = self.encoderModel.get_extended_attention_mask(mask, embeddings.size()[:-1], device)
                 last_hidden_state = self.encoderModel.roberta.encoder(embeddings, extended_attention_mask)['last_hidden_state']
+
+            elif model_choice == "microsoft/deberta-v2-xlarge":
+
+                embeddings = self.encoderModel.deberta.embeddings(ids)
+                #extended_attention_mask = self.encoderModel.get_extended_attention_mask(mask, embeddings.size()[:-1], device)
+                #extended_attention_mask = extended_attention_mask.reshape(extended_attention_mask.shape[0], 
+                #                                                          extended_attention_mask.shape[1],
+                #                                                          extended_attention_mask.shape[3])
+                #print("deberta sizes")
+                #print(embeddings.shape)
+                #print(extended_attention_mask.shape)
+                #last_hidden_state = self.encoderModel.deberta.encoder(embeddings, extended_attention_mask)['last_hidden_state']
+                last_hidden_state = self.encoderModel.deberta.encoder(embeddings, mask)['last_hidden_state']
+
 
             else:
 
@@ -330,8 +350,6 @@ def tokenize_and_align_labels(examples):
 device = "cuda:0"
 device = torch.device(device)
 
-classification_datasets = ['NCBI-disease']
-
 num_epochs = 100 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
@@ -360,39 +378,42 @@ number_of_warmup_steps = 100
 # Select model and hyperparameters here
 ############################################################
 
-chosen_learning_rate_choices = [1e-4] # Learning rate choices for the bc5cdr, JNLPBA, 
+classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
+
+chosen_learning_rate_choices = [5e-6, 5e-6, 5e-5] # Learning rate choices for the bc5cdr, JNLPBA, 
                                                   # and NCBI-disease respectively
-chosen_bottleneck_values = [256] # Bottleneck dimension choices for the Chemprot, SciCite, 
+chosen_bottleneck_values = [256, 256, 256] # Bottleneck dimension choices for the Chemprot, SciCite, 
                                           # and SciERC-Relation respectively
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
  
 #model_choice = 'roberta-large'
-model_choice = 'allenai/scibert_scivocab_uncased'
-#model_choice = "microsoft/deberta-v2-xlarge"
+#model_choice = 'allenai/scibert_scivocab_uncased'
+model_choice = "microsoft/deberta-v2-xlarge"
 
-adapters_on_all_layers = True
-
-############################################################
-
-
-
-
-
-
-
-
-
-
+adapters_on_all_layers = False
 
 ############################################################
 
-assigned_batch_size = 32
+
+
+
+
+
+
+
+
+
+
+############################################################
+
+assigned_batch_size = 8
+gradient_accumulation_multiplier = 4
 tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
 ############################################################
 
-if model_choice == 'roberta-large':
+if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
 
     unfrozen_components = ['classifier']
 
@@ -446,6 +467,8 @@ for dataset in classification_datasets:
         print(dataset_folder_path + dataset)
 
 ############################################################
+
+results_string = ""
 
 learning_rate_to_results_dict = {}
 
@@ -644,6 +667,8 @@ for chosen_learning_rate, bottleneck_value, dataset in zip(chosen_learning_rate_
 
             total_epochs_performed = 0
 
+            gradient_accumulation_count = 0
+
             for epoch in range(num_epochs):
 
                 total_epochs_performed += 1
@@ -663,10 +688,13 @@ for chosen_learning_rate, bottleneck_value, dataset in zip(chosen_learning_rate_
 
                     loss = outputs['loss']
                     loss.backward()
-
-                    optimizer.step()
-                    lr_scheduler.step()
-                    optimizer.zero_grad()
+                        
+                    gradient_accumulation_count += 1
+                    if gradient_accumulation_count % (gradient_accumulation_multiplier) == 0:
+                        optimizer.step()
+                        lr_scheduler.step()
+                        optimizer.zero_grad()
+                        
                     progress_bar.update(1)
                     train_losses.append(loss.item())
 
@@ -793,6 +821,11 @@ for chosen_learning_rate, bottleneck_value, dataset in zip(chosen_learning_rate_
             micro_averages.append(micro_f_1_results['f1'] * 100)
             macro_averages.append(macro_f_1_results['f1'] * 100)
 
+            results_string += "Micro F1: " + str(micro_f_1_results['f1']) + "\n"
+            results_string += "Macro F1: " + str(macro_f_1_results['f1']) + "\n"
+
+
+
         print("--------------------------------------------------")
         print("Final Results for Paper")
         print("--------------------------------------------------")
@@ -817,3 +850,10 @@ for chosen_learning_rate, bottleneck_value, dataset in zip(chosen_learning_rate_
 
         ############################################################
 
+
+
+checkpoint_path = "Experiment#9_NER_" + model_choice.replace("/", "-") + "_" + str(chosen_learning_rate) + "_"
+checkpoint_path += str(use_all_adapter) + ".txt"
+
+with open(checkpoint_path, "w") as text_file:
+    text_file.write(results_string)
