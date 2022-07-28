@@ -56,13 +56,7 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
 classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
-#classification_datasets = ['sci-cite', 'sciie-relation-extraction']
-#classification_datasets = ['chemprot']
-#classification_datasets = ['sci-cite']
-#classification_datasets = ['sciie-relation-extraction']
-#classification_datasets = ['mag']
 
 num_epochs = 100 #1000 #10
 patience_value = 10 #10 #3
@@ -78,13 +72,7 @@ validation_set_scoring = False
 assigned_batch_size = 8
 gradient_accumulation_multiplier = 4
 
-#learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
-#learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6]
-
-#learning_rate_choices = [0.001, 0.005, 0.0001, 0.0005, 1e-5, 5e-5] #1e-5
-#learning_rate_choices = [0.001, 0.003, 0.0002]
-
-learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]#[1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
 ############################################################
 

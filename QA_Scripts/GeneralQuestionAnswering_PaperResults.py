@@ -51,6 +51,12 @@ class CustomBERTModel(nn.Module):
             embedding_size = 512
             self.encoderModel = model_encoding
 
+          elif model_choice == "microsoft/deberta-v2-xlarge":
+
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
+            embedding_size = 1536
+            self.encoderModel = model_encoding
+
           else:
 
             model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
@@ -185,7 +191,7 @@ class CustomBERTModel(nn.Module):
         start_logits = classifier_output[:, :, 0]
         end_logits = classifier_output[:, :, 1]
 
-	    return {'start_logits': start_logits, 'end_logits': end_logits}
+        return {'start_logits': start_logits, 'end_logits': end_logits}
 
 ##################################################
 
@@ -244,7 +250,7 @@ device = torch.device(device)
 num_epochs = 10 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
-number_of_runs = 10 #1 #5
+number_of_runs = 3 #1 #5
 frozen_choice = False
 average_hidden_state = False
 
@@ -268,14 +274,15 @@ warmup_steps_count_ratio = 0.2
 # Select model and hyperparameters here
 ############################################################
 
-learning_rate_for_each_dataset = [5e-5]
+learning_rate_for_each_dataset = [5e-6]
 frozen_layers = 0 # For freezing k-later layers of transformer model
 frozen_embeddings = False # For freezing input embeddings layer of transformer model
 
+model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
+#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #model_choice = "bert-base-uncased"
 #model_choice = 't5-base'
 #model_choice = 't5-small'
@@ -295,7 +302,7 @@ chosen_dataset = 'trivia_qa'
 
 
 
-
+############################################################
 
 context_cutoff_count = 1024
 context_token_count = 512
@@ -343,6 +350,8 @@ if not os.path.isdir(dataset_folder_path):
     os.mkdir(dataset_folder_path)
 
 ############################################################
+
+results_string = ""
 
 for chosen_learning_rate in learning_rate_for_each_dataset:
 
@@ -633,6 +642,9 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 	    f1_scores_saved.append(round(f1_score * 100, 2))
 	    exact_matches_saved.append(round(exact_match_score * 100, 2))
 
+	    results_string += "Exact Match: " + str(round(exact_match_score * 100, 2)) + "\n"
+	    results_string += "F1-Score: " + str(round(f1_score * 100, 2)) + "\n"
+
 
 	print("-----------------------------------------------------------------")
 	print("Final Results for Spreadsheet")
@@ -661,4 +673,15 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 	
 
 	############################################################
+
+checkpoint_path = "paper_results_qa_" + model_choice.replace("/", "-") + "_" + str(chosen_learning_rate) + "_"
+checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
+checkpoint_path += str(validation_set_scoring) + ".txt"
+
+with open(checkpoint_path, "w") as text_file:
+    text_file.write(results_string)
+
+
+
+
 

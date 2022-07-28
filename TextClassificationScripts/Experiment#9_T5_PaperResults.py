@@ -34,7 +34,7 @@ import random
 
 ############################################################
 
-random_state = 50
+random_state = 42
 
 np.random.seed(random_state)
 random.seed(random_state)
@@ -56,14 +56,6 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
-#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
-#classification_datasets = ['sci-cite', 'sciie-relation-extraction']
-#classification_datasets = ['chemprot']
-#classification_datasets = ['sci-cite']
-#classification_datasets = ['sciie-relation-extraction']
-#classification_datasets = ['mag']
-
 num_epochs = 100 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
@@ -83,10 +75,8 @@ gradient_accumulation_multiplier = 4
 
 ############################################################
 
-# Change the starting
-
-classification_datasets = ['chemprot', 'sci-cite']
-learning_rate_choices = [1e-4, 1e-4]#[1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
+classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+learning_rate_choices = [1e-4, 1e-4, 1e-4] #[1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 bottleneck_value = 256
@@ -100,6 +90,9 @@ use_all_adapter = True
 
 
 
+
+
+############################################################
 
 if model_choice in ["google/t5-large-lm-adapt"]:
 

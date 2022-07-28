@@ -56,13 +56,13 @@ class CustomBERTModel(nn.Module):
 
           super(CustomBERTModel, self).__init__()
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
-          if model_choice == "t5-3b":
+          if model_choice in ["t5-3b"]:
 
             model_encoding = T5EncoderModel.from_pretrained(model_choice)
             embedding_size = 1024
             self.encoderModel = model_encoding
 
-          elif model_choice in ["roberta-large", "google/t5-large-lm-adapt"]:
+          elif model_choice in ["roberta-large", "google/t5-large-lm-adapt", "microsoft/deberta-v3-large"]:
 
             model_encoding = AutoModel.from_pretrained(model_choice)
             embedding_size = 1024
@@ -224,8 +224,8 @@ current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 12 #12 layers for BERT total, 24 layers for T5 and RoBERTa, 48 for DeBERTa XXL
-frozen_embeddings = True
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa, 48 for DeBERTa XXL
+frozen_embeddings = False
 average_hidden_state = False
 
 validation_set_scoring = True
@@ -234,9 +234,7 @@ gradient_accumulation_multiplier = 4
 
 num_warmup_steps = 100
 
-#learning_rate_choices = [2e-5]
 learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
-#learning_rate_choices = [3e-5, 4e-5, 5e-5, 6e-5]
 
 mlp_classifier = False
 

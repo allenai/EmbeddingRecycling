@@ -73,11 +73,9 @@ gradient_accumulation_multiplier = 8
 
 num_warmup_steps = 100
 
-#learning_rate_choices = [2e-5]
-learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6] #[1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]#[1e-3, 5e-3, 1e-4, 5e-4, 1e-5, 2e-5, 5e-5, 5e-6]
-#learning_rate_choices = [3e-5, 4e-5, 5e-5, 6e-5]
-
 ############################################################
+
+learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6] 
  
 model_choice = "google/t5-large-lm-adapt"
 tokenizer = AutoTokenizer.from_pretrained(model_choice)

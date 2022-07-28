@@ -71,11 +71,10 @@ gradient_accumulation_multiplier = 8
 
 num_warmup_steps = 100
 
-classification_datasets = ["sciie-relation-extraction"]
-chosen_learning_rates = [1e-4]
-
-
 ############################################################
+
+classification_datasets = ['chemprot', 'sci-cite', "sciie-relation-extraction"]
+chosen_learning_rates = [1e-4, 1e-4, 1e-4]
  
 model_choice = "google/t5-large-lm-adapt"
 tokenizer = AutoTokenizer.from_pretrained(model_choice)

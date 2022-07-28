@@ -106,9 +106,11 @@ def preprocess_function_single_answer(examples):
 
         given_answers = [current_answer['text'][0] for current_answer in examples["answers"]]
 
-        decoded_inputs = tokenizer(
+        answer_tokenizer = AutoTokenizer.from_pretrained(model_choice).to(device)
+
+        decoded_inputs = answer_tokenizer(
             given_answers,
-            max_length=context_token_count,
+            #max_length=16,
             truncation="only_second",
             return_offsets_mapping=True,
             padding="max_length",
@@ -231,8 +233,12 @@ def reformat_trivia_qa(examples):
 
 ########################################################################
 
-#model_choice = "microsoft/deberta-v2-xlarge"
-model_choice = "google/t5-large-lm-adapt"
+device = "cuda:0"
+#device = "cpu"
+device = torch.device(device)
+
+model_choice = "microsoft/deberta-v2-xlarge"
+#model_choice = "google/t5-large-lm-adapt"
 #model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
@@ -246,7 +252,7 @@ model_choice = "google/t5-large-lm-adapt"
 #model_choice = 'csarron/bert-base-uncased-squad-v1'
 #model_choice = 'google/t5-v1_1-small'
 
-tokenizer = AutoTokenizer.from_pretrained(model_choice)
+tokenizer = AutoTokenizer.from_pretrained(model_choice)#.to(device)
 
 context_cutoff_count = 1024
 context_token_count = 512
@@ -259,23 +265,19 @@ reduced_sample = False
 
 only_preprocess_questions = False
 
-#chosen_dataset = "trivia_qa"
-#chosen_dataset = "natural_questions"
-#chosen_dataset = "squad_v2"
-chosen_dataset = "squad"
-
-#squad = load_dataset('squad')
+chosen_dataset = "trivia_qa"
+#chosen_dataset = "squad"
 
 #################################################################
 
 if chosen_dataset == "trivia_qa":
-	current_dataset = load_dataset(chosen_dataset, 'rc')
+	current_dataset = load_dataset(chosen_dataset, 'rc')#.to(device)
 elif chosen_dataset == "natural_questions":
-	current_dataset = load_dataset(chosen_dataset)
+	current_dataset = load_dataset(chosen_dataset)#.to(device)
 elif chosen_dataset == "squad_v2":
-	current_dataset = load_dataset(chosen_dataset)
+	current_dataset = load_dataset(chosen_dataset)#.to(device)
 elif chosen_dataset == "squad":
-	current_dataset = load_dataset(chosen_dataset)
+	current_dataset = load_dataset(chosen_dataset)#.to(device)
 
 save_path = "./" + chosen_dataset + "_dataset_" + model_choice + "_" + str(context_cutoff_count) + "_" + str(context_token_count)
 save_path += "_" + str(multi_answer) + "_" + str(remove_missing_answers) + "_" + str(reduced_sample)# + "_" + str(only_preprocess_questions)

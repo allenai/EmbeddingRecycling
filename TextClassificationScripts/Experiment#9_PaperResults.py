@@ -54,13 +54,7 @@ def get_gpu_memory():
 device = "cuda:0"
 device = torch.device(device)
 
-#classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction', 'mag']
 classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
-#classification_datasets = ['sci-cite', 'sciie-relation-extraction']
-#classification_datasets = ['chemprot']
-#classification_datasets = ['sci-cite']
-#classification_datasets = ['sciie-relation-extraction']
-#classification_datasets = ['mag']
 
 num_epochs = 100 #1000 #10
 patience_value = 5 #10 #3
@@ -89,7 +83,7 @@ gradient_accumulation_multiplier = 4
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 
-chosen_learning_rate_choices = [1e-4, 2e-4, 2e-4] # Learning rate choices for the Chemprot, SciCite, 
+chosen_learning_rate_choices = [1e-5, 1e-4, 1e-5] # Learning rate choices for the Chemprot, SciCite, 
                                                   # and SciERC-Relation respectively
 chosen_bottleneck_values = [256, 256, 256] # Bottleneck dimension choices for the Chemprot, SciCite, 
                                            # and SciERC-Relation respectively
@@ -98,7 +92,7 @@ chosen_bottleneck_values = [256, 256, 256] # Bottleneck dimension choices for th
 #model_choice = 'allenai/scibert_scivocab_uncased'
 model_choice = "microsoft/deberta-v2-xlarge"
 
-use_all_adapter = False
+use_all_adapter = True
 
 ############################################################
 
@@ -109,7 +103,7 @@ use_all_adapter = False
 
 
 
-
+############################################################
 
 if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
 
@@ -173,6 +167,8 @@ for dataset in classification_datasets:
         print(dataset_folder_path + dataset)
 
 ############################################################
+
+results_string = ""
 
 learning_rate_to_results_dict = {}
 
@@ -524,6 +520,9 @@ for chosen_learning_rate, bottleneck_value, dataset in zip(chosen_learning_rate_
 	        micro_averages.append(micro_f_1_results['f1'])
 	        macro_averages.append(macro_f_1_results['f1'])
 
+	        results_string += "Micro F1: " + str(micro_f_1_results['f1']) + "\n"
+	        results_string += "Macro F1: " + str(macro_f_1_results['f1']) + "\n"
+
 	    print("--------------------------------------------------")
 	    print("Final Results for Paper")
 	    print("--------------------------------------------------")
@@ -546,4 +545,14 @@ for chosen_learning_rate, bottleneck_value, dataset in zip(chosen_learning_rate_
 	    print("--------------------------------------------------")
 
 	    ############################################################
+
+
+
+checkpoint_path = "Experiment#9_TextClassification_" + model_choice.replace("/", "-") + "_" + str(chosen_learning_rate) + "_"
+checkpoint_path += str(use_all_adapter) + ".txt"
+
+with open(checkpoint_path, "w") as text_file:
+    text_file.write(results_string)
+
+
 

@@ -3,12 +3,12 @@
 
 import json
 from datasets import load_dataset, load_from_disk, DatasetDict, Dataset, load_metric
-from transformers import DefaultDataCollator, AutoTokenizer, get_scheduler, AutoModelForQuestionAnswering, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, get_scheduler, AutoModelForQuestionAnswering, AutoModelForSequenceClassification
 from transformers import AutoModelForQuestionAnswering, TrainingArguments, Trainer
 from tqdm import tqdm
 import torch.nn as nn
 from opendelta import AdapterModel, BitFitModel
-import tensorflow as tf
+#import tensorflow as tf
 
 from urllib.request import urlopen, Request
 
@@ -259,7 +259,7 @@ bottleneck_value = 256 # Bottleneck dimension choice
 
 warmup_steps_count_ratio = 0.2
 
-learning_rate_for_each_dataset = [1e-4]
+learning_rate_for_each_dataset = [2e-5]
 
 model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'roberta-large'
@@ -267,7 +267,7 @@ model_choice = "microsoft/deberta-v2-xlarge"
 
 chosen_dataset = 'trivia_qa'
 
-use_all_adapter = True
+use_all_adapter = False
 
 ############################################################
 
@@ -366,6 +366,8 @@ if not os.path.isdir(dataset_folder_path):
 
 ############################################################
 
+results_string = ""
+
 for chosen_learning_rate in learning_rate_for_each_dataset:
 
 	print("--------------------------------------------------------------------------")
@@ -409,7 +411,7 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 
 	for i in range(0, number_of_runs):
 
-	    checkpoint_path = "paper_results_qa/" + model_choice.replace("/", "-") + "/experiment9_qa_" + str(chosen_learning_rate) + "_"
+	    checkpoint_path = "/net/nfs.cirrascale/s2-research/jons/paper_results_qa/" + model_choice.replace("/", "-") + "/experiment9_qa_" + str(chosen_learning_rate) + "_"
 	    checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
 	    checkpoint_path += str(validation_set_scoring) + "_" + str(bottleneck_value) + "_Run_" + str(i) + ".pt"
 
@@ -670,6 +672,9 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 	    f1_scores_saved.append(round(f1_score * 100, 2))
 	    exact_matches_saved.append(round(exact_match_score * 100, 2))
 
+	    results_string += "Exact Match: " + str(round(exact_match_score * 100, 2)) + "\n"
+	    results_string += "F1-Score: " + str(round(f1_score * 100, 2)) + "\n"
+
 
 	print("-----------------------------------------------------------------")
 	print("Final Results for Spreadsheet")
@@ -698,4 +703,13 @@ for chosen_learning_rate in learning_rate_for_each_dataset:
 	
 
 	############################################################
+
+
+checkpoint_path = "Experiment#9_QA_" + model_choice.replace("/", "-") + "_" + str(chosen_learning_rate) + "_"
+checkpoint_path += str(use_all_adapter) + ".txt"
+
+with open(checkpoint_path, "w") as text_file:
+    text_file.write(results_string)
+
+
 
