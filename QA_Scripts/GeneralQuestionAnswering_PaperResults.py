@@ -254,8 +254,8 @@ number_of_runs = 3 #1 #5
 frozen_choice = False
 average_hidden_state = False
 
-assigned_batch_size = 8
-gradient_accumulation_multiplier = 4
+assigned_batch_size = 4
+gradient_accumulation_multiplier = 8
 
 validation_set_scoring = False
 
@@ -274,9 +274,9 @@ warmup_steps_count_ratio = 0.2
 # Select model and hyperparameters here
 ############################################################
 
-learning_rate_for_each_dataset = [5e-6]
-frozen_layers = 0 # For freezing k-later layers of transformer model
-frozen_embeddings = False # For freezing input embeddings layer of transformer model
+learning_rate_for_each_dataset = [5e-5]
+frozen_layers = 18 # For freezing k-later layers of transformer model
+frozen_embeddings = True # For freezing input embeddings layer of transformer model
 
 model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'roberta-large'

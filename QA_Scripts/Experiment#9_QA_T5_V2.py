@@ -50,9 +50,9 @@ device = torch.device(device)
 model_choice = "google/t5-large-lm-adapt"
 
 bottleneck_value = 256
-use_all_adapter = False
+use_all_adapter = True
 
-learning_rate_choices = [2e-4]
+learning_rate_choices = [1e-4]
 
 runs = 3
 
