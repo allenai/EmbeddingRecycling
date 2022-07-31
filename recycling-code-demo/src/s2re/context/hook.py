@@ -1,16 +1,8 @@
 from contextlib import contextmanager
 from inspect import getfullargspec, unwrap
 from pathlib import Path
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterator,
-    Optional,
-    Sequence,
-    Type,
-    Union,
-)
+from typing import (Any, Callable, Dict, Iterator, Optional, Sequence, Type,
+                    Union)
 
 import torch
 
@@ -63,6 +55,7 @@ class CachingHook:
         path: Union[str, Path],
         backend_kwargs: Optional[Dict[str, Any]] = None,
         device: Optional[str] = None,
+        half_precision: bool = False,
     ) -> Iterator[CachingSession]:
         caching_modules = cls.find_all_caching_modules(module)
 
@@ -73,6 +66,7 @@ class CachingHook:
             backend=backend,
             path=path,
             backend_kwargs=backend_kwargs,
+            half_precision=half_precision,
         )
         try:
             [m.set_session(session) for m in caching_modules]
@@ -94,6 +88,7 @@ class CachingHook:
         fetch_key_fn: Optional[Callable] = None,
         fetch_timeout: float = 0.1,
         fetch_retry_count: int = 10,
+        half_precision: bool = False,
     ) -> Iterator[CachingSession]:
 
         caching_modules = cls.find_all_caching_modules(module)
@@ -109,6 +104,7 @@ class CachingHook:
             fetch_key_fn=fetch_key_fn,
             fetch_timeout=fetch_timeout,
             fetch_retry_count=fetch_retry_count,
+            half_precision=half_precision,
         )
         try:
             [m.set_session(session) for m in caching_modules]
@@ -130,6 +126,7 @@ class CachingHook:
         fetch_key_fn: Optional[Callable] = None,
         fetch_timeout: float = 0.1,
         fetch_retry_count: int = 10,
+        half_precision: bool = False,
     ) -> Iterator[CachingSession]:
 
         caching_modules = cls.find_all_caching_modules(module)
@@ -145,6 +142,7 @@ class CachingHook:
             fetch_key_fn=fetch_key_fn,
             fetch_timeout=fetch_timeout,
             fetch_retry_count=fetch_retry_count,
+            half_precision=half_precision,
         )
         try:
             [m.set_session(session) for m in caching_modules]

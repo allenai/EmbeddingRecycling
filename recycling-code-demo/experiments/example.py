@@ -4,17 +4,11 @@ from pathlib import Path
 from typing import Union
 
 from torch.nn import ModuleList
-from transformers import (
-    BertConfig,
-    BertForSequenceClassification,
-    BertTokenizer,
-)
-from transformers.models.bert.modeling_bert import (
-    BertEmbeddings,
-    BertEncoder,
-    BertLayer,
-    BertModel,
-)
+from transformers import (BertConfig, BertForSequenceClassification,
+                          BertTokenizer)
+from transformers.models.bert.modeling_bert import (BertEmbeddings,
+                                                    BertEncoder, BertLayer,
+                                                    BertModel)
 
 try:
     from s2re import CachedLayer, CacheKeyLookup, CachingHook, NoOpWhenCached
@@ -54,7 +48,9 @@ class CachedBertEncoder(BertEncoder):
 
         position_to_cache = getattr(config, "position_to_cache", None)
         if position_to_cache is None:
-            position_to_cache = max(round(config.num_hidden_layers / 2) - 1, 0)
+            position_to_cache = max(
+                round(config.num_hidden_layers / 2) - 1, 0
+            )
 
         def layer_factory(layer_idx: int):
             if layer_idx < position_to_cache:

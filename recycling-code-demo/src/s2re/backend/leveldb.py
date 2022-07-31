@@ -44,7 +44,9 @@ class LevelDBStorage(BaseKVStorage):
     def batch_read(
         self: "LevelDBStorage", keys: Iterable[HookComboKeyType]
     ) -> Sequence[HookComboValueType]:
-        return [self.sr.deserialize(self.db.get(self.sr.key(k))) for k in keys]
+        return [
+            self.sr.deserialize(self.db.get(self.sr.key(k))) for k in keys
+        ]
 
     def batch_write(
         self: "LevelDBStorage",

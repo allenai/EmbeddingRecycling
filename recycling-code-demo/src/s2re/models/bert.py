@@ -3,14 +3,9 @@ from typing import Union
 from torch.nn import Module, ModuleList
 from transformers.models.bert.configuration_bert import BertConfig
 from transformers.models.bert.modeling_bert import (
-    BertEmbeddings,
-    BertEncoder,
-    BertForMaskedLM,
-    BertForSequenceClassification,
-    BertForTokenClassification,
-    BertLayer,
-    BertModel,
-)
+    BertEmbeddings, BertEncoder, BertForMaskedLM,
+    BertForSequenceClassification, BertForTokenClassification, BertLayer,
+    BertModel)
 
 from s2re import CachedLayer, CacheKeyLookup, NoOpWhenCached
 
@@ -55,7 +50,9 @@ class CachedBertEncoder(BertEncoder):
         if hasattr(config, "position_to_cache"):
             position_to_cache = int(getattr(config, "position_to_cache"))
         else:
-            position_to_cache = max(round(config.num_hidden_layers / 2) - 1, 0)
+            position_to_cache = max(
+                round(config.num_hidden_layers / 2) - 1, 0
+            )
 
         def layer_factory(layer_idx: int) -> Module:
             if layer_idx < position_to_cache:

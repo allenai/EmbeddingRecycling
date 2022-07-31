@@ -31,6 +31,7 @@ class CacheConfig(sp.DataClass):
     _target_: str = sp.Target.to_string(CachingHook)
     path: str = "/tmp/r3"
     backend: str = "leveldb"
+    half_precision: bool = False
 
 
 @sp.dataclass
@@ -223,12 +224,14 @@ def keep_n(element: Dict[str, Any], idx: int, n: int) -> bool:
 
 @sp.cli(Experiment)
 def main(config: Experiment):
-    tokenizer = sp.init(
+    tokenizer = sp.init.now(
         config.tokenizer,
         transformers.tokenization_utils_base.PreTrainedTokenizerBase,
     )
 
-    dataset = sp.init(config.dataset.loader, datasets.arrow_dataset.Dataset)
+    dataset = sp.init.now(
+        config.dataset.loader, datasets.arrow_dataset.Dataset
+    )
     dataset = dataset.flatten()  # type: ignore
     num_papers = len(dataset) if config.dataset.num_samples else None
 
@@ -282,7 +285,7 @@ def main(config: Experiment):
 
     if 1 in config.steps:
         # FIRST TEST: Vanilla transformer model as implemented in HuggingFace
-        model = sp.init(
+        model = sp.init.now(
             config.model, transformers.modeling_utils.PreTrainedModel
         )
         model.to(config.device)
@@ -298,7 +301,7 @@ def main(config: Experiment):
 
     if 2 in config.steps:
         # SECOND TEST: Cached transformer model, but with caching disabled
-        model = sp.init(
+        model = sp.init.now(
             config.cached_model, transformers.modeling_utils.PreTrainedModel
         )
         model.to(config.device)
@@ -314,10 +317,10 @@ def main(config: Experiment):
 
     if 3 in config.steps:
         # THIRD TEST: Cached transformer model, now saving the cache
-        model = sp.init(
+        model = sp.init.now(
             config.cached_model, transformers.modeling_utils.PreTrainedModel
         )
-        caching_hook = sp.init(config.cache, CachingHook)
+        caching_hook = sp.init.now(config.cache, CachingHook)
 
         model.to(config.device)
         with caching_hook.record(model):
@@ -339,10 +342,10 @@ def main(config: Experiment):
         )
 
         # FOURTH TEST: Cached transformer model, using the cache
-        model = sp.init(
+        model = sp.init.now(
             config.cached_model, transformers.modeling_utils.PreTrainedModel
         )
-        caching_hook = sp.init(config.cache, CachingHook)
+        caching_hook = sp.init.now(config.cache, CachingHook)
         model.to(config.device)
         caching_context_fn = (
             caching_hook.train if config.is_train else caching_hook.use
@@ -360,8 +363,8 @@ def main(config: Experiment):
         cache_size = None
 
     if 5 in config.steps:
-        model = sp.init(config.cached_model, PreTrainedModel)
-        caching_hook = sp.init(config.cache, CachingHook)
+        model = sp.init.now(config.cached_model, PreTrainedModel)
+        caching_hook = sp.init.now(config.cache, CachingHook)
         model.to(config.device)
         caching_context_fn = (
             caching_hook.train if config.is_train else caching_hook.use

@@ -1,6 +1,6 @@
 import multiprocessing
 from pathlib import Path
-from typing import Iterable, Sequence, Type
+from typing import Iterable, Optional, Sequence, Type
 
 try:
     import rocksdb
@@ -52,7 +52,9 @@ class RocksDBStorage(BaseKVStorage):
     def batch_read(
         self: "RocksDBStorage", keys: Iterable[HookComboKeyType]
     ) -> Sequence[HookComboValueType]:
-        return [self.sr.deserialize(self.db.get(self.sr.key(k))) for k in keys]
+        return [
+            self.sr.deserialize(self.db.get(self.sr.key(k))) for k in keys
+        ]
 
     def batch_write(
         self: "RocksDBStorage",

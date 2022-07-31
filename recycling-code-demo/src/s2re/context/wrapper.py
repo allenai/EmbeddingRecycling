@@ -4,18 +4,8 @@ from collections import abc
 from pathlib import Path
 from queue import Queue
 from time import sleep
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    Type,
-    Union,
-)
+from typing import (Any, Callable, Dict, Iterable, Mapping, Optional,
+                    Sequence, Tuple, Type, Union, overload)
 
 import numpy as np
 import torch
@@ -24,8 +14,229 @@ from ..backend import BackendRegistry
 from ..backend.base import BaseKVStorage
 from ..types import HookComboKeyType, HookComboValueType
 
+BaseKeyType = Union[torch.Tensor, Sequence[torch.Tensor], Sequence[bytes]]
 
-class StorageWrapper:
+
+class MoveAndGradMixIn:
+    @staticmethod
+    def _move_and_grad(
+        tensor: torch.Tensor,
+        grad: bool,
+        device: Union[str, torch.device],
+        dtype: Optional[torch.dtype] = None,
+    ) -> torch.Tensor:
+        """Moves a tensor to the device and attaches/detaches gradients.
+        Sequence of gradients/device moving is slightly different depending
+        on whether the gradients are getting attached or detached."""
+        if not grad:
+            tensor = tensor.detach()
+
+        if dtype:
+            tensor = tensor.type(dtype)
+        tensor = tensor.to(device)
+
+        if grad:
+            # NOTE: this is an in-place operation, no cloning
+            tensor.requires_grad_(True)
+        return tensor
+
+
+class KeyCastingMixIn(MoveAndGradMixIn):
+    @overload
+    @classmethod
+    def _cast_key(
+        cls,
+        key_to_cast: torch.Tensor,
+        cast_type_map: Optional[Mapping[torch.dtype, torch.dtype]] = None,
+    ) -> Sequence[bytes]:
+        ...
+
+    @overload
+    @classmethod
+    def _cast_key(
+        cls,
+        key_to_cast: Sequence[torch.Tensor],
+        cast_type_map: Optional[Mapping[torch.dtype, torch.dtype]] = None,
+    ) -> Sequence[bytes]:
+        ...
+
+    @overload
+    @classmethod
+    def _cast_key(
+        cls,
+        key_to_cast: Sequence[bytes],
+        cast_type_map: Optional[Mapping[torch.dtype, torch.dtype]] = None,
+    ) -> Sequence[bytes]:
+        ...
+
+    @classmethod
+    def _cast_key(
+        cls,
+        key_to_cast: BaseKeyType,
+        cast_type_map: Optional[Mapping[torch.dtype, torch.dtype]] = None,
+    ) -> Sequence[bytes]:
+        """Turns a tensor containing a key into a list of bytes."""
+        if isinstance(key_to_cast, torch.Tensor):
+            key_to_cast = [key_to_cast]
+
+        casted_key = [
+            cls._move_and_grad(
+                tensor=key,
+                grad=False,
+                device="cpu",
+                dtype=(
+                    cast_type_map.get(key.dtype, key.dtype)
+                    if cast_type_map
+                    else None
+                ),
+            )
+            .numpy()
+            .tobytes()
+            if not isinstance(key, bytes)
+            else key
+            for key in key_to_cast
+        ]
+        return casted_key
+
+
+BaseValueType = Union[torch.Tensor, np.ndarray]
+AllValueContainersToCast = Union[
+    BaseValueType,
+    Sequence[BaseValueType],
+    Mapping[str, BaseValueType],
+    Sequence[Sequence[BaseValueType]],
+    Sequence[Mapping[str, BaseValueType]],
+]
+AllValueContainersCasted = Union[
+    torch.Tensor,
+    Mapping[str, Union[torch.Tensor, Sequence[torch.Tensor]]],
+    Sequence[
+        Union[
+            torch.Tensor, Sequence[torch.Tensor], Mapping[str, torch.Tensor]
+        ]
+    ],
+]
+
+
+class ValueCastingMixIn(MoveAndGradMixIn):
+    @overload
+    @classmethod
+    def _cast_value(
+        cls,
+        value: BaseValueType,
+        device: Union[str, torch.device],
+        requires_grad: bool = False,
+        cast_type_map: Optional[Mapping[torch.dtype, torch.dtype]] = None,
+    ) -> torch.Tensor:
+        ...
+
+    @overload
+    @classmethod
+    def _cast_value(
+        cls,
+        value: Mapping[str, BaseValueType],
+        device: Union[str, torch.device],
+        requires_grad: bool = False,
+        cast_type_map: Optional[Mapping[torch.dtype, torch.dtype]] = None,
+    ) -> Mapping[str, torch.Tensor]:
+        ...
+
+    @overload
+    @classmethod
+    def _cast_value(
+        cls,
+        value: Sequence[BaseValueType],
+        device: Union[str, torch.device],
+        requires_grad: bool = False,
+        cast_type_map: Optional[Mapping[torch.dtype, torch.dtype]] = None,
+    ) -> Sequence[torch.Tensor]:
+        ...
+
+    @overload
+    @classmethod
+    def _cast_value(
+        cls,
+        value: Sequence[Sequence[BaseValueType]],
+        device: Union[str, torch.device],
+        requires_grad: bool = False,
+        cast_type_map: Optional[Mapping[torch.dtype, torch.dtype]] = None,
+    ) -> Sequence[Sequence[torch.Tensor]]:
+        ...
+
+    @overload
+    @classmethod
+    def _cast_value(
+        cls,
+        value: Sequence[Mapping[str, BaseValueType]],
+        device: Union[str, torch.device],
+        requires_grad: bool = False,
+        cast_type_map: Optional[Mapping[torch.dtype, torch.dtype]] = None,
+    ) -> Sequence[Mapping[str, torch.Tensor]]:
+        ...
+
+    @classmethod
+    def _cast_value(
+        cls,
+        value: AllValueContainersToCast,
+        device: Union[str, torch.device],
+        requires_grad: bool = False,
+        cast_type_map: Optional[Mapping[torch.dtype, torch.dtype]] = None,
+    ) -> AllValueContainersCasted:
+        """Move tensor(s) to cpu, and remove gradients"""
+
+        casted_value: AllValueContainersCasted
+
+        if isinstance(value, abc.Mapping):
+            casted_value = {
+                key: cls._cast_value(
+                    value=element,
+                    requires_grad=requires_grad,
+                    device=device,
+                    cast_type_map=cast_type_map,
+                )
+                for key, element in value.items()
+            }
+        elif isinstance(value, abc.Sequence):
+            casted_valued = [
+                cls._cast_value(
+                    element,
+                    requires_grad=requires_grad,
+                    device=device,
+                    cast_type_map=cast_type_map,
+                )
+                for element in value
+            ]
+            casted_value = casted_valued
+        elif isinstance(value, torch.Tensor):
+            casted_type = (
+                cast_type_map.get(value.dtype, None)
+                if cast_type_map is not None
+                else None
+            )
+            casted_value = cls._move_and_grad(
+                value, grad=requires_grad, device=device, dtype=casted_type
+            )
+        elif isinstance(value, np.ndarray):
+            casted_value = torch.from_numpy(value)
+            if (
+                cast_type_map is not None
+                and (dtype := cast_type_map.get(casted_value.dtype, None))
+                is not None
+            ):
+                casted_value = casted_value.type(dtype)
+
+        else:
+            raise ValueError(f"Cannot cast value of type {type(value)}")
+
+        return casted_value
+
+
+ValueStorageWrapperType = Union[
+    torch.Tensor, Sequence[torch.Tensor], Mapping[str, torch.Tensor]
+]
+
+
+class StorageWrapper(KeyCastingMixIn, ValueCastingMixIn):
     """A wrapper for a storage backend.
 
     Takes care of moving tensors to cpu and removing gradients, including
@@ -44,115 +255,76 @@ class StorageWrapper:
         path: Union[str, Path],
         device: Union[str, torch.device],
         backend_kwargs: Optional[Dict[str, Any]] = None,
+        cast_types_map: Optional[Dict[torch.dtype, torch.dtype]] = None,
     ):
         self.device = device
         self.backend = backend
         self.backend_kwargs = backend_kwargs or {}
         self.path = path
         self.storage = self._get_storage()
+        self.cast_types_map = cast_types_map or {}
 
     def _get_storage(self) -> BaseKVStorage:
         return BackendRegistry.get(self.backend)(
             path=self.path, **self.backend_kwargs
         )
 
-    @classmethod
-    def _cast_key(
-        cls,
-        key_to_cast: Union[
-            torch.Tensor, Sequence[torch.Tensor], Sequence[bytes]
-        ],
-    ) -> List[bytes]:
-        """Turns a tensor containing a key into a list of bytes."""
-        is_seq = isinstance(key_to_cast, abc.Sequence)
-        is_seq_bytes = is_seq and all(
-            isinstance(elem, bytes) for elem in key_to_cast
-        )
+    @overload
+    def store(
+        self,
+        key: torch.Tensor,
+        value: ValueStorageWrapperType,
+    ) -> None:
+        ...
 
-        if is_seq_bytes:
-            # already a list of bytes
-            return key_to_cast  # type: ignore
-
-        seq_key = key_to_cast if is_seq else [key_to_cast]
-        return [
-            cls._cast_value(elem, device="cpu").numpy().tobytes()
-            for elem in seq_key
-        ]
-
-    @staticmethod
-    def _move_and_grad(
-        tensor: torch.Tensor,
-        grad: bool,
-        device: Union[str, torch.device],
-    ) -> torch.Tensor:
-        """Moves a tensor to the device and attaches/detaches gradients.
-        Sequence of gradients/device moving is slightly different depending
-        on whether the gradients are getting attached or detached."""
-        if not grad:
-            tensor = tensor.detach()
-        tensor = tensor.to(device)
-        if grad:
-            # NOTE: this is an in-place operation, no cloning
-            tensor.requires_grad_(True)
-        return tensor
-
-    @classmethod
-    def _cast_value(
-        cls,
-        value: HookComboValueType,
-        device: Union[str, torch.device],
-        requires_grad: bool = False,
-    ) -> HookComboValueType:
-        """Move tensor(s) to cpu, and remove gradients"""
-
-        if isinstance(value, abc.Mapping):
-            casted_value = {
-                key: cls._cast_value(
-                    element, requires_grad=requires_grad, device=device
-                )
-                for key, element in value.items()
-            }
-        elif isinstance(value, abc.Sequence):
-            casted_value = [
-                cls._cast_value(
-                    element, requires_grad=requires_grad, device=device
-                )
-                for element in value
-            ]
-        elif isinstance(value, torch.Tensor):
-            casted_value = cls._move_and_grad(
-                value, grad=requires_grad, device=device
-            )
-        elif isinstance(value, np.ndarray):
-            casted_value = torch.from_numpy(value)
-        else:
-            raise ValueError(f"Cannot cast value of type {type(value)}")
-
-        return casted_value
+    @overload
+    def store(
+        self,
+        key: Sequence[torch.Tensor],
+        value: Sequence[ValueStorageWrapperType],
+    ) -> None:
+        ...
 
     def store(
         self,
         key: Union[torch.Tensor, Sequence[torch.Tensor]],
-        value: Union[torch.Tensor, Sequence[torch.Tensor]],
+        value: Union[
+            ValueStorageWrapperType, Sequence[ValueStorageWrapperType]
+        ],
     ) -> None:
         """Stores a value or list of values in the storage backend."""
 
-        seq_key = self._cast_key(key)
-        seq_val = [value] if isinstance(key, torch.Tensor) else value
+        seq_key = self._cast_key(key, cast_type_map=self.cast_types_map)
 
-        casted_seq_val = self._cast_value(seq_val, device="cpu")
+        # always wrapping single tensors otherwise they don't match with
+        # casted_key
+        if isinstance(key, torch.Tensor):
+            seq_val: Sequence[ValueStorageWrapperType] = [value]  # type: ignore
+        else:
+            seq_val: Sequence[ValueStorageWrapperType] = value  # type: ignore
+
+        casted_seq_val = self._cast_value(
+            value=seq_val, device="cpu", cast_type_map=self.cast_types_map
+        )
         self.storage.batch_write(keys=seq_key, values=casted_seq_val)
 
     def fetch(
         self: "StorageWrapper",
         key: Union[torch.Tensor, Sequence[torch.Tensor], Sequence[bytes]],
         training: bool = False,
-    ) -> HookComboValueType:
+    ) -> AllValueContainersCasted:
         """Fetches values for one or more keys from the storage backend."""
 
         seq_val = [
-            self._cast_value(v, device=self.device, requires_grad=training)
-            for v in self.storage.batch_read(keys=self._cast_key(key))
+            self._cast_value(
+                value=value,
+                device=self.device,
+                requires_grad=training,
+                cast_type_map=self.cast_types_map,
+            )
+            for value in self.storage.batch_read(
+                keys=self._cast_key(key, cast_type_map=self.cast_types_map)
+            )
         ]
 
         if isinstance(key, torch.Tensor):
@@ -165,7 +337,9 @@ class StorageWrapper:
         key: Union[torch.Tensor, Sequence[torch.Tensor], Sequence[bytes]],
     ) -> None:
         """Deletes one or a list of keys from the storage backend."""
-        self.storage.batch_delete(keys=self._cast_key(seq_key))
+        self.storage.batch_delete(
+            keys=self._cast_key(key, cast_type_map=self.cast_types_map)
+        )
 
 
 class StopFlag:
@@ -192,6 +366,7 @@ class FetchAheadStorageWrapper(StorageWrapper):
         backend_kwargs: Optional[Dict[str, Any]] = None,
         timeout: float = 0.1,
         retry_count: int = 10,
+        cast_types_map: Optional[Dict[torch.dtype, torch.dtype]] = None,
         new_queue_factory: Optional[Callable] = None,
         new_store_factory: Optional[Callable] = None,
     ):
@@ -201,6 +376,7 @@ class FetchAheadStorageWrapper(StorageWrapper):
             path=path,
             device=device,
             backend_kwargs=backend_kwargs,
+            cast_types_map=cast_types_map,
         )
 
         if new_queue_factory is None:
@@ -251,6 +427,7 @@ class FetchAheadStorageWrapper(StorageWrapper):
                 backend=self.backend,
                 opts=self.backend_kwargs,
                 path=self.path,
+                cast_type_map=self.cast_types_map,
             ),
             # in case something goes wrong with data loader,
             # `daemon=True` will prevent process hanging
@@ -262,7 +439,7 @@ class FetchAheadStorageWrapper(StorageWrapper):
         cls: Type["FetchAheadStorageWrapper"],
         to_fetch_queue: Queue[Any],
         to_yield_queue: Queue[Any],
-        fetch_key_fn: Callable[[Any], HookComboKeyType],
+        fetch_key_fn: Callable[[Any], BaseKeyType],
         fetched_store: Dict[Tuple[bytes], Any],
         timeout: float,
         max_tries: int,
@@ -270,6 +447,7 @@ class FetchAheadStorageWrapper(StorageWrapper):
         opts: Optional[Dict[str, Any]],
         path: Union[str, Path],
         max_store_size: int = 0,
+        cast_type_map: Optional[Mapping[torch.dtype, torch.dtype]] = None,
     ) -> None:
 
         storage_wrapper = StorageWrapper(
@@ -284,7 +462,7 @@ class FetchAheadStorageWrapper(StorageWrapper):
                 break
 
             key = fetch_key_fn(elem)
-            cast_key = cls._cast_key(key)
+            cast_key = cls._cast_key(key, cast_type_map=cast_type_map)
             value = storage_wrapper.fetch(cast_key)
 
             max_tries_cnt = max_tries
@@ -357,7 +535,9 @@ class FetchAheadStorageWrapper(StorageWrapper):
         """Fetches values for one or more keys from the storage backend."""
 
         # casting Tensors to bytes, getting the values.
-        seq_key = tuple(self._cast_key(key))
+        seq_key = tuple(
+            self._cast_key(key, cast_type_map=self.cast_types_map)
+        )
 
         retry_count = self._fetch_retry_count
 
@@ -373,7 +553,12 @@ class FetchAheadStorageWrapper(StorageWrapper):
 
         seq_val = self._fetched_store.pop(seq_key)
 
-        seq_val = [self._cast_value(v, device=self.device) for v in seq_val]
+        seq_val = [
+            self._cast_value(
+                v, device=self.device, cast_type_map=self.cast_types_map
+            )
+            for v in seq_val
+        ]
 
         if isinstance(key, torch.Tensor):
             return seq_val[0]

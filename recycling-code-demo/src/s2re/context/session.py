@@ -4,11 +4,8 @@ from typing import Any, Callable, Dict, Iterable, Optional, Union
 import torch
 
 from ..types import HookComboValueType
-from .wrapper import (
-    FetchAheadStorageWrapper,
-    MultiprocessingFetchAheadStorageWrapper,
-    StorageWrapper,
-)
+from .wrapper import (FetchAheadStorageWrapper,
+                      MultiprocessingFetchAheadStorageWrapper, StorageWrapper)
 
 
 class CachingSession:
@@ -35,11 +32,22 @@ class CachingSession:
         fetch_spawn: str = "thread",
         fetch_timeout: float = 0.1,
         fetch_retry_count: int = 10,
+        half_precision: bool = False,
     ):
         self._key = None
 
         self.recording = recording
         self.training = training
+
+        if half_precision:
+            cast_type_map = {
+                torch.float32: torch.float16,
+                torch.float64: torch.float16,
+                torch.int64: torch.int16,
+                torch.int32: torch.int16,
+            }
+        else:
+            cast_type_map = None
 
         if self.recording and self.training:
             raise ValueError(
@@ -70,6 +78,7 @@ class CachingSession:
                 fetch_key_fn=fetch_key_fn,
                 timeout=fetch_timeout,
                 retry_count=fetch_retry_count,
+                cast_types_map=cast_type_map,
             )
         else:
             self.storage = StorageWrapper(
@@ -77,6 +86,7 @@ class CachingSession:
                 path=path,
                 backend_kwargs=backend_kwargs,
                 device=device,
+                cast_types_map=cast_type_map,
             )
 
     def iterate(self, iterable: Iterable[Any]) -> Iterable[Any]:
