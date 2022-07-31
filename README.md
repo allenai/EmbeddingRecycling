@@ -23,7 +23,7 @@ conda activate embedding_recycling
 
 ## Experiment Replication
 
-To replicate our results, use the conda environment listed above and run the following scripts for each set of dataset group:
+To replicate our results, use the conda environment listed above and run the following scripts for each dataset group:
 
 - For text classification, use the `TextClassificationScripts/GeneralLinearClassifier_PaperResults.py` script
 - For NER, use the `NER_Scripts/General_NER_Classifier_PaperResults.py` script
