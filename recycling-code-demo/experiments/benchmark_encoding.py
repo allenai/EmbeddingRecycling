@@ -1,20 +1,20 @@
-from abc import ABC, abstractstaticmethod
 import io
-import sys
-from pathlib import Path
 import pickle
 import pickletools
+import sys
 import time
 import warnings
-import numpy as np
-import torch
-import pyarrow
+from abc import ABC, abstractstaticmethod
+from pathlib import Path
 
+import numpy as np
+import pyarrow
+import torch
 
 try:
     from s2re.backend.serialization import PickleSerialization
 except ImportError:
-    src = Path(__file__).parent / '..' / 'src'
+    src = Path(__file__).parent / ".." / "src"
     sys.path.append(str(src))
     from s2re.backend.serialization import PickleSerialization
 
@@ -23,17 +23,19 @@ class Benchmark(ABC):
     BENCHMARKS = []
 
     @abstractstaticmethod
-    def save(t: torch.Tensor) -> bytes: ...
+    def save(t: torch.Tensor) -> bytes:
+        ...
 
     @abstractstaticmethod
-    def load(b: bytes) -> torch.Tensor: ...
+    def load(b: bytes) -> torch.Tensor:
+        ...
 
     @classmethod
     def register(cls, benchmark_cls):
         if benchmark_cls not in cls.BENCHMARKS:
             cls.BENCHMARKS.append(benchmark_cls)
         else:
-            raise ValueError(f'{benchmark_cls} is already registered')
+            raise ValueError(f"{benchmark_cls} is already registered")
         return cls
 
     @classmethod
@@ -57,9 +59,11 @@ class ViaPickleWithBuffers(Benchmark):
     @staticmethod
     def save(t: torch.Tensor) -> bytes:
         buffers = []
-        data = pickle.dumps(t.detach().cpu().numpy(),
-                            protocol=5,
-                            buffer_callback=buffers.append)
+        data = pickle.dumps(
+            t.detach().cpu().numpy(),
+            protocol=5,
+            buffer_callback=buffers.append,
+        )
         return pickle.dumps((data, *(bytes(b.raw()) for b in buffers)))
 
     @staticmethod
@@ -67,7 +71,9 @@ class ViaPickleWithBuffers(Benchmark):
         data, *buffers = pickle.loads(bytes_data)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            return torch.from_numpy(pickle.loads(data, buffers=buffers)).clone()
+            return torch.from_numpy(
+                pickle.loads(data, buffers=buffers)
+            ).clone()
 
 
 @Benchmark.register
@@ -91,8 +97,12 @@ class ViaBuffer(Benchmark):
     @staticmethod
     def save(t: torch.Tensor) -> bytes:
         buffer = io.BytesIO()
-        torch.save(t.cpu().detach(), buffer, pickle_protocol=5,
-                   _use_new_zipfile_serialization=False)
+        torch.save(
+            t.cpu().detach(),
+            buffer,
+            pickle_protocol=5,
+            _use_new_zipfile_serialization=False,
+        )
         return buffer.getvalue()
 
     @staticmethod
@@ -203,7 +213,9 @@ class ViaNumpyAndTorch(Benchmark):
 class ViaTorch(Benchmark):
     @staticmethod
     def save(t: torch.Tensor) -> bytes:
-        return pickle.dumps((memoryview(t.numpy()).tobytes(), t.shape, t.dtype))
+        return pickle.dumps(
+            (memoryview(t.numpy()).tobytes(), t.shape, t.dtype)
+        )
 
     @staticmethod
     def load(b: bytes) -> torch.Tensor:
@@ -221,7 +233,7 @@ def main():
         for _ in range(cnt):
             arr_ = strategy.save(arr)
         save_time = (time.time() - start) * 1000
-        print(f'{strategy.__name__} save {save_time / cnt:.2f} ms/op')
+        print(f"{strategy.__name__} save {save_time / cnt:.2f} ms/op")
 
         to_ld_arr = strategy.save(arr2)
 
@@ -229,13 +241,13 @@ def main():
         for _ in range(cnt):
             ld_arr = strategy.load(to_ld_arr)
         load_time = (time.time() - start) * 1000
-        print(f'{strategy.__name__} load {load_time / cnt:.2f} ms/op')
+        print(f"{strategy.__name__} load {load_time / cnt:.2f} ms/op")
 
-        print(f'{strategy.__name__} size {len(arr_) / 1.e6 :.2f} MB')
+        print(f"{strategy.__name__} size {len(arr_) / 1.e6 :.2f} MB")
 
-        assert (ld_arr == arr2).all(), 'Loaded array is not equal to original'
-        print('---')
+        assert (ld_arr == arr2).all(), "Loaded array is not equal to original"
+        print("---")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
