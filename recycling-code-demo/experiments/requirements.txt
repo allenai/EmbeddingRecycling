@@ -5,3 +5,4 @@ pyarrow==8.0.0
 springs==1.0.4
 ipython==8.3.0
 datasets==2.2.2
+sentencepiece==0.1.96
