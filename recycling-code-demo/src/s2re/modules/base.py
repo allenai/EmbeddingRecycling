@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from typing import Tuple, Union
 
 import torch
@@ -6,25 +6,52 @@ import torch
 from ..context.session import CachingSession
 
 
-class BaseModuleWithCaching(ABC):
+class BaseModuleWithCaching(ABC, torch.nn.Module):
     @property
     def cache(self) -> Union[CachingSession, None]:
         """Get the caching session object."""
-        return getattr(self, '__caching_session__', None)
+        return getattr(self, "__caching_session__", None)
 
     def set_session(self, caching_session: CachingSession):
         """Assign a session object to the module."""
-        return setattr(self, '__caching_session__', caching_session)
+        return setattr(self, "__caching_session__", caching_session)
 
     def del_session(self):
         """Remove the session object from the module."""
-        return delattr(self, '__caching_session__')
+        return delattr(self, "__caching_session__")
 
     def get_cache_hit_value(self):
         """Value to return when there is a cache hit.
         Subclasses might customize it for compatibility reasons."""
         return None
 
+
+class CacheKeyLookup(BaseModuleWithCaching):
+    def _find_cache_key(self, *args, **kwargs) -> torch.LongTensor:
+        name_or_pos = self.get_cache_arg_name_or_pos()
+        if isinstance(name_or_pos, tuple):
+            name, pos = name_or_pos
+        elif isinstance(name_or_pos, str):
+            name, pos = name_or_pos, None
+        elif isinstance(name_or_pos, int):
+            pos, name = name_or_pos, None
+        else:
+            pos = name = None
+
+        if name is not None:
+            if name not in kwargs and pos is None:
+                raise ValueError(f"Keyword argument {name} not found.")
+            return kwargs[name]
+
+        elif pos is not None:
+            if pos >= len(args):
+                raise ValueError(f"Positional argument {pos} not found.")
+            return args[pos]
+
+        else:
+            raise ValueError("Either name or position must be specified.")
+
+    @abstractmethod
     def get_cache_arg_name_or_pos(self) -> Union[str, int, Tuple[str, int]]:
         """Name and/or position of the argument to use for caching.
 
@@ -38,37 +65,10 @@ class BaseModuleWithCaching(ABC):
             the keyword argument `input_ids` for caching; `input_ids` is not
             found, use the first positional argument.
         """
-        raise NotImplementedError('Subclasses must implement this method '
-                                  'to support setting the cache key.')
-
-
-class BaseMixinWithBaseModuleWithCaching(BaseModuleWithCaching,
-                                         torch.nn.Module):
-    """Mixin for type annotations"""
-    ...
-
-
-class CacheKeyLookup(BaseModuleWithCaching):
-    def _find_cache_key(self, *args, **kwargs) -> torch.LongTensor:
-        name_or_pos = self.get_cache_arg_name_or_pos()
-        if isinstance(name_or_pos, tuple):
-            name, pos = name_or_pos
-        elif isinstance(name_or_pos, str):
-            name, pos = name_or_pos, None
-        elif isinstance(name_or_pos, int):
-            pos, name = name_or_pos, None
-        else:
-            raise ValueError('Either name or position must be specified.')
-
-        if name is not None:
-            if name not in kwargs and pos is None:
-                raise ValueError(f'Keyword argument {name} not found.')
-            return kwargs[name]
-
-        if pos is not None:
-            if pos >= len(args):
-                raise ValueError(f'Positional argument {pos} not found.')
-            return args[pos]
+        raise NotImplementedError(
+            "Subclasses must implement this method "
+            "to support setting the cache key."
+        )
 
     def forward(self, *args, **kwargs):
         if self.cache is None:

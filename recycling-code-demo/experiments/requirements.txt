@@ -1,8 +1,7 @@
 plotly==5.8.0
-pandas>=1.4.0
-kaleido>=0.2
-pyarrow>=8.0.0
-springs>=1.0.4
-tqdm>=4.4
-ipython>=8.3.0
+pandas==1.4.0
+kaleido==0.2
+pyarrow==8.0.0
+springs==1.0.4
+ipython==8.3.0
 datasets==2.2.2

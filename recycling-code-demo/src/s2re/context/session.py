@@ -1,13 +1,13 @@
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Union, Callable
+from typing import Any, Callable, Dict, Iterable, Optional, Union
 
 import torch
 
 from ..types import HookComboValueType
 from .wrapper import (
-    StorageWrapper,
     FetchAheadStorageWrapper,
-    MultiprocessingFetchAheadStorageWrapper
+    MultiprocessingFetchAheadStorageWrapper,
+    StorageWrapper,
 )
 
 
@@ -22,38 +22,59 @@ class CachingSession:
     of re-running layers.
     """
 
-    def __init__(self,
-                 recording: bool,
-                 backend: str,
-                 device: Union[str, torch.device],
-                 path: Union[str, Path],
-                 training: bool = False,
-                 backend_kwargs: Optional[Dict[str, Any]] = None,
-                 fetch_ahead: int = -1,
-                 fetch_key_fn: Optional[Callable] = None,
-                 fetch_spawn: str = 'thread',
-                 fetch_timeout: float = 0.1,
-                 fetch_retry_count: int = 10):
+    def __init__(
+        self,
+        recording: bool,
+        backend: str,
+        device: Union[str, torch.device],
+        path: Union[str, Path],
+        training: bool = False,
+        backend_kwargs: Optional[Dict[str, Any]] = None,
+        fetch_ahead: int = -1,
+        fetch_key_fn: Optional[Callable] = None,
+        fetch_spawn: str = "thread",
+        fetch_timeout: float = 0.1,
+        fetch_retry_count: int = 10,
+        half_precision: bool = False,
+        cast_type_map: Optional[Dict[torch.dtype, torch.dtype]] = None,
+    ):
         self._key = None
 
         self.recording = recording
         self.training = training
 
+        if half_precision:
+            cast_type_map = {
+                torch.float32: torch.float16,
+                torch.float16: torch.float32,
+                torch.int64: torch.int16,
+                torch.int16: torch.int64,
+                # in case user specifies more sophisticated mappings
+                **(cast_type_map or {}),
+            }
+        else:
+            # set to none if not half precision
+            cast_type_map = None
+
         if self.recording and self.training:
-            raise ValueError('Can not record embeddings '
-                             'in cache while training')
+            raise ValueError(
+                "Can not record embeddings " "in cache while training"
+            )
 
         if fetch_ahead > 0:
-            assert fetch_key_fn is not None, \
-                'fetch_key_fn must be provided when prefetching'
+            assert (
+                fetch_key_fn is not None
+            ), "fetch_key_fn must be provided when prefetching"
 
-            if fetch_spawn == 'process':
+            if fetch_spawn == "process":
                 wrapper_factory = MultiprocessingFetchAheadStorageWrapper
-            elif fetch_spawn == 'thread':
+            elif fetch_spawn == "thread":
                 wrapper_factory = FetchAheadStorageWrapper
             else:
-                raise ValueError(f'Unknown fetch_spawn value: {fetch_spawn} '
-                                 '(expected "process" or "thread")')
+                raise ValueError(
+                    f"Unknown fetch_spawn value: {fetch_spawn} "
+                    '(expected "process" or "thread")'
+                )
 
             self.storage = wrapper_factory(
                 backend=backend,
@@ -64,13 +85,15 @@ class CachingSession:
                 fetch_key_fn=fetch_key_fn,
                 timeout=fetch_timeout,
                 retry_count=fetch_retry_count,
+                cast_types_map=cast_type_map,
             )
         else:
             self.storage = StorageWrapper(
                 backend=backend,
                 path=path,
                 backend_kwargs=backend_kwargs,
-                device=device
+                device=device,
+                cast_types_map=cast_type_map,
             )
 
     def iterate(self, iterable: Iterable[Any]) -> Iterable[Any]:
@@ -81,26 +104,27 @@ class CachingSession:
 
     def store(self, value: torch.Tensor):
         if self._key is None:
-            raise RuntimeError('Key not provided')
+            raise RuntimeError("Key not provided")
 
         if not self.recording:
-            raise RuntimeError('Not in cache recording mode!')
+            raise RuntimeError("Not in cache recording mode!")
 
         self.storage.store(key=self._key, value=value)
         self._key = None
 
     def fetch(self) -> HookComboValueType:
         if self._key is None:
-            raise RuntimeError('Key not provided')
+            raise RuntimeError("Key not provided")
 
         if self.recording:
-            raise RuntimeError('Not in cache fetching mode!')
+            raise RuntimeError("Not in cache fetching mode!")
 
         out = self.storage.fetch(self._key)
+
         self._key = None
         return out
 
     def key(self, key: torch.Tensor):
         if self._key is not None:
-            raise RuntimeError('Key is already set')
+            raise RuntimeError("Key is already set")
         self._key = key
