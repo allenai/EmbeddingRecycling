@@ -3,9 +3,14 @@ from typing import Union
 from torch.nn import Module, ModuleList
 from transformers.models.bert.configuration_bert import BertConfig
 from transformers.models.bert.modeling_bert import (
-    BertEmbeddings, BertEncoder, BertForMaskedLM,
-    BertForSequenceClassification, BertForTokenClassification, BertLayer,
-    BertModel)
+    BertEmbeddings,
+    BertEncoder,
+    BertForMaskedLM,
+    BertForSequenceClassification,
+    BertForTokenClassification,
+    BertLayer,
+    BertModel,
+)
 
 from s2re import CachedLayer, CacheKeyLookup, NoOpWhenCached
 

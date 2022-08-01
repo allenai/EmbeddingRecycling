@@ -1,8 +1,16 @@
 from abc import ABC, abstractclassmethod, abstractmethod
 from functools import partial
 from pathlib import Path
-from typing import (Callable, Iterable, Optional, Protocol, Sequence, Type,
-                    Union, get_type_hints)
+from typing import (
+    Callable,
+    Iterable,
+    Optional,
+    Protocol,
+    Sequence,
+    Type,
+    Union,
+    get_type_hints,
+)
 
 from ..types import BackendValueType, HookComboKeyType, HookComboValueType
 from .serialization import PickleSerialization

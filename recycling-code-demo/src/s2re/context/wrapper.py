@@ -4,8 +4,19 @@ from collections import abc
 from pathlib import Path
 from queue import Queue
 from time import sleep
-from typing import (Any, Callable, Dict, Iterable, Mapping, Optional,
-                    Sequence, Tuple, Type, Union, overload)
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    overload,
+)
 
 import numpy as np
 import torch
@@ -262,7 +273,7 @@ class StorageWrapper(KeyCastingMixIn, ValueCastingMixIn):
         self.backend_kwargs = backend_kwargs or {}
         self.path = path
         self.storage = self._get_storage()
-        self.cast_types_map = cast_types_map or {}
+        self.cast_types_map = cast_types_map
 
     def _get_storage(self) -> BaseKVStorage:
         return BackendRegistry.get(self.backend)(
@@ -306,6 +317,7 @@ class StorageWrapper(KeyCastingMixIn, ValueCastingMixIn):
         casted_seq_val = self._cast_value(
             value=seq_val, device="cpu", cast_type_map=self.cast_types_map
         )
+
         self.storage.batch_write(keys=seq_key, values=casted_seq_val)
 
     def fetch(

@@ -4,8 +4,11 @@ from typing import Any, Callable, Dict, Iterable, Optional, Union
 import torch
 
 from ..types import HookComboValueType
-from .wrapper import (FetchAheadStorageWrapper,
-                      MultiprocessingFetchAheadStorageWrapper, StorageWrapper)
+from .wrapper import (
+    FetchAheadStorageWrapper,
+    MultiprocessingFetchAheadStorageWrapper,
+    StorageWrapper,
+)
 
 
 class CachingSession:
@@ -113,6 +116,7 @@ class CachingSession:
             raise RuntimeError("Not in cache fetching mode!")
 
         out = self.storage.fetch(self._key)
+
         self._key = None
         return out
 

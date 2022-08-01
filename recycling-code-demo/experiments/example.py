@@ -4,11 +4,17 @@ from pathlib import Path
 from typing import Union
 
 from torch.nn import ModuleList
-from transformers import (BertConfig, BertForSequenceClassification,
-                          BertTokenizer)
-from transformers.models.bert.modeling_bert import (BertEmbeddings,
-                                                    BertEncoder, BertLayer,
-                                                    BertModel)
+from transformers import (
+    BertConfig,
+    BertForSequenceClassification,
+    BertTokenizer,
+)
+from transformers.models.bert.modeling_bert import (
+    BertEmbeddings,
+    BertEncoder,
+    BertLayer,
+    BertModel,
+)
 
 try:
     from s2re import CachedLayer, CacheKeyLookup, CachingHook, NoOpWhenCached

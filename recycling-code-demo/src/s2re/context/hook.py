@@ -1,8 +1,16 @@
 from contextlib import contextmanager
 from inspect import getfullargspec, unwrap
 from pathlib import Path
-from typing import (Any, Callable, Dict, Iterator, Optional, Sequence, Type,
-                    Union)
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    Optional,
+    Sequence,
+    Type,
+    Union,
+)
 
 import torch
 
