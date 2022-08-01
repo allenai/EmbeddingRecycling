@@ -36,6 +36,7 @@ class CachingSession:
         fetch_timeout: float = 0.1,
         fetch_retry_count: int = 10,
         half_precision: bool = False,
+        cast_type_map: Optional[Dict[torch.dtype, torch.dtype]] = None,
     ):
         self._key = None
 
@@ -45,11 +46,14 @@ class CachingSession:
         if half_precision:
             cast_type_map = {
                 torch.float32: torch.float16,
-                torch.float64: torch.float16,
+                torch.float16: torch.float32,
                 torch.int64: torch.int16,
-                torch.int32: torch.int16,
+                torch.int16: torch.int64,
+                # in case user specifies more sophisticated mappings
+                **(cast_type_map or {}),
             }
         else:
+            # set to none if not half precision
             cast_type_map = None
 
         if self.recording and self.training:

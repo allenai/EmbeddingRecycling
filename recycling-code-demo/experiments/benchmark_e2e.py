@@ -68,7 +68,7 @@ class FetchConfig(sp.DataClass):
     fetch_ahead: int = 32
     fetch_spawn: str = "thread"
     fetch_timeout: float = 0.1
-    fetch_retry_count: int = 10
+    fetch_retry_count: int = 100
 
 
 @sp.dataclass
@@ -370,20 +370,24 @@ def main(config: Experiment):
             caching_hook.train if config.is_train else caching_hook.use
         )
 
-        with caching_context_fn(
-            model,
-            fetch_key_fn=lambda x: x["input_ids"],
-            **sp.to_dict(config.fetch),  # type: ignore
-        ) as session:
+        try:
+            with caching_context_fn(
+                model,
+                fetch_key_fn=lambda x: x["input_ids"],
+                **sp.to_dict(config.fetch),  # type: ignore
+            ) as session:
 
-            caching_prefetch_delta = run_model(
-                model=model,
-                data_loader=session.iterate(data_loader),
-                num_batches=len(data_loader),
-                step="caching_prefetch",
-                is_train=config.is_train,
-            )
-        del model, caching_hook
+                caching_prefetch_delta = run_model(
+                    model=model,
+                    data_loader=session.iterate(data_loader),
+                    num_batches=len(data_loader),
+                    step="caching_prefetch",
+                    is_train=config.is_train,
+                )
+            del model, caching_hook
+        except Exception as e:
+            print(e)
+            caching_prefetch_delta = None
     else:
         caching_prefetch_delta = None
 

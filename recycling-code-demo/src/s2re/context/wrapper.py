@@ -327,6 +327,10 @@ class StorageWrapper(KeyCastingMixIn, ValueCastingMixIn):
     ) -> AllValueContainersCasted:
         """Fetches values for one or more keys from the storage backend."""
 
+        fetched_val = self.storage.batch_read(
+            keys=self._cast_key(key, cast_type_map=self.cast_types_map)
+        )
+
         seq_val = [
             self._cast_value(
                 value=value,
@@ -334,9 +338,7 @@ class StorageWrapper(KeyCastingMixIn, ValueCastingMixIn):
                 requires_grad=training,
                 cast_type_map=self.cast_types_map,
             )
-            for value in self.storage.batch_read(
-                keys=self._cast_key(key, cast_type_map=self.cast_types_map)
-            )
+            for value in fetched_val
         ]
 
         if isinstance(key, torch.Tensor):

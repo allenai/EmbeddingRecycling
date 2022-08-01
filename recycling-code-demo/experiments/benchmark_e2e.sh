@@ -10,25 +10,33 @@ done
 SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 
 export PYTHONPATH="${SCRIPT_DIR}/../src:${PYTHONPATH}"
+START_DT="$(date +'%Y-%m-%d_%H-%M')"
 
 
-tries=1
+###### CONFIGURATION HERE ######
+tries=7
 backbones=(
     'nreimers/MiniLMv2-L6-H384-distilled-from-BERT-Large'
-    # 'nreimers/MiniLMv2-L6-H768-distilled-from-BERT-Large'
-    # 'bert-base-uncased'
-    # 'bert-large-uncased'
+    'nreimers/MiniLMv2-L6-H768-distilled-from-BERT-Large'
+    'bert-base-uncased'
+    'bert-large-uncased'
 )
 half_precision='true'
 batch_size='128'
 fetch_ahead='16'
-fetch_spawn='thread'
+# fetch_spawn='thread'
+fetch_spawn='process'
 cache_path='/tmp/r3'
+###############################
 
 
 for backbone in "${backbones[@]}"; do
+
     # start by removing existing cache
     rm -rf ${cache_path}
+
+    # create location for logs
+    mkdir -p "${HOME}/benchmarks"
 
     set -x
 
@@ -44,7 +52,7 @@ for backbone in "${backbones[@]}"; do
             fetch_ahead=${fetch_ahead} \
             cache.half_precision=${half_precision} \
             cache.path=${cache_path} \
-            logs_path="${HOME}/benchmark_e2e.log"
+            logs_path="${HOME}/benchmarks/r3_e2e-${START_DT}.log"
 
     set +x
 
@@ -64,13 +72,13 @@ for backbone in "${backbones[@]}"; do
             cache.backend=leveldb \
             device=cuda \
             keep_cache=True \
-            steps='[4,5]' \
+            steps='[2,4,5]' \
             batch_size=${batch_size} \
             fetch_ahead=${fetch_ahead} \
             cache.half_precision=${half_precision} \
             fetch_spawn=${fetch_spawn} \
             cache.path=${cache_path} \
-            logs_path="${HOME}/benchmark_e2e.log"
+            logs_path="${HOME}/benchmarks/r3_e2e-${START_DT}.log"
 
         set +x # don't print commands
 
