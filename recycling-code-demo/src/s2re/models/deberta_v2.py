@@ -14,7 +14,9 @@ from transformers.models.deberta_v2.modeling_deberta_v2 import (
     DebertaV2Model,
 )
 
-from s2re import CachedLayer, CacheKeyLookup, NoOpWhenCached
+from s2re import (
+    CachedLayer, CacheKeyLookup, NoOpWhenCached, BaseModuleWithCaching
+)
 
 __all__ = [
     "CachedDebertaV2ForSequenceClassification",
@@ -50,7 +52,7 @@ class CachedDebertaV2Config(DebertaV2Config):
         self.position_to_cache = position_to_cache
 
 
-class CachedDebertaV2Encoder(DebertaV2Encoder):
+class CachedDebertaV2Encoder(BaseModuleWithCaching, DebertaV2Encoder):
     def __init__(self, config: CachedDebertaV2Config):
         super().__init__(config)
 
@@ -74,12 +76,20 @@ class CachedDebertaV2Encoder(DebertaV2Encoder):
             [layer_factory(i) for i in range(config.num_hidden_layers)]
         )
 
+    def get_rel_pos(self, hidden_states, query_states=None, relative_pos=None):
+        if self.cache is None or self.cache.recording or self.cache.training:
+            return super().get_rel_pos(
+                hidden_states, query_states, relative_pos
+            )
+        else:
+            return super().get_rel_pos(self.cache._key.unsqueeze(-1))
+
 
 class CachedDebertaV2Model(DebertaV2Model):
     def __init__(
-        self, config: CachedDebertaV2Config, add_pooling_layer: bool = True
+        self, config: CachedDebertaV2Config
     ):
-        super().__init__(config=config, add_pooling_layer=add_pooling_layer)
+        super().__init__(config=config)
         self.embeddings = CachedDebertaV2Embeddings(config)
         self.encoder = CachedDebertaV2Encoder(config)
 
@@ -87,16 +97,16 @@ class CachedDebertaV2Model(DebertaV2Model):
 class CachedDebertaV2ForSequenceClassification(DebertaV2ForSequenceClassification):
     def __init__(self, config: CachedDebertaV2Config) -> None:
         super().__init__(config)
-        self.DebertaV2 = CachedDebertaV2Model(config)
+        self.deberta = CachedDebertaV2Model(config)
 
 
 class CachedDebertaV2ForTokenClassification(DebertaV2ForTokenClassification):
     def __init__(self, config: CachedDebertaV2Config) -> None:
         super().__init__(config)
-        self.DebertaV2 = CachedDebertaV2Model(config)
+        self.deberta = CachedDebertaV2Model(config)
 
 
 class CachedDebertaV2ForMaskedLM(DebertaV2ForMaskedLM):
     def __init__(self, config):
         super().__init__(config)
-        self.DebertaV2 = CachedDebertaV2Model(config)
+        self.deberta = CachedDebertaV2Model(config)

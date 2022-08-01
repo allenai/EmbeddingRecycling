@@ -19,10 +19,13 @@ from transformers import BertForSequenceClassification  # type: ignore
 from transformers import BertTokenizer  # type: ignore
 from transformers import DataCollatorWithPadding  # type: ignore
 from transformers import PreTrainedModel  # type: ignore
+from transformers import DebertaV2ForSequenceClassification
+from transformers import DebertaV2Tokenizer
 
 from s2re import CachingHook
 from s2re.backend import BackendRegistry
 from s2re.models.bert import CachedBertForSequenceClassification
+from s2re.models.deberta_v2 import CachedDebertaV2ForSequenceClassification
 from s2re.utils import get_file_size
 
 
@@ -36,14 +39,19 @@ class CacheConfig(sp.DataClass):
 
 @sp.dataclass
 class TokenizerConfig(sp.DataClass):
-    _target_: str = sp.Target.to_string(BertTokenizer.from_pretrained)
+    # _target_: str = sp.Target.to_string(BertTokenizer.from_pretrained)
+    _target_: str = sp.Target.to_string(DebertaV2Tokenizer.from_pretrained)
     pretrained_model_name_or_path: str = "${backbone}"
+    model_max_length: int = 512
 
 
 @sp.dataclass
 class ModelConfig(sp.DataClass):
+    # _target_: str = sp.Target.to_string(
+    #     BertForSequenceClassification.from_pretrained
+    # )
     _target_: str = sp.Target.to_string(
-        BertForSequenceClassification.from_pretrained
+        DebertaV2ForSequenceClassification.from_pretrained
     )
     pretrained_model_name_or_path: str = "${backbone}"
 
@@ -86,8 +94,11 @@ class Experiment(sp.DataClass):
     model: ModelConfig = ModelConfig()
     fetch: FetchConfig = FetchConfig()
     cached_model: ModelConfig = ModelConfig(
+        # _target_=sp.Target.to_string(
+        #     CachedBertForSequenceClassification.from_pretrained
+        # )
         _target_=sp.Target.to_string(
-            CachedBertForSequenceClassification.from_pretrained
+            CachedDebertaV2ForSequenceClassification.from_pretrained
         )
     )
     dataset: DatasetConfig = DatasetConfig()
@@ -261,7 +272,6 @@ def main(config: Experiment):
         ),
         remove_columns=dataset.column_names,
     )
-
     num_tokens = sum(
         dataset.map(partial(count_tokens, column_name="input_ids"))[
             "count_tokens"
