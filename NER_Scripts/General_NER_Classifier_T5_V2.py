@@ -254,10 +254,10 @@ classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
 num_epochs = 100 #1000 #10
 patience_value = 10 #10 #3
 current_dropout = True
-number_of_runs = 5 #1 #5
+number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate =  0.0001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
-frozen_layers = 6 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_layers = 24 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = True
 average_hidden_state = False
 validation_set_scoring = False
@@ -273,7 +273,7 @@ number_of_warmup_steps = 100
 
 ############################################################
 
-learning_rate_choices = [1e-5, 1e-5, 5e-6]
+learning_rate_choices = [1e-3, 2e-3]
 
 model_choice = "google/t5-large-lm-adapt"
 

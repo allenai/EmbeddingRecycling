@@ -254,8 +254,8 @@ number_of_runs = 3 #1 #5
 frozen_choice = False
 average_hidden_state = False
 
-assigned_batch_size = 4
-gradient_accumulation_multiplier = 8
+assigned_batch_size = 2
+gradient_accumulation_multiplier = 16
 
 validation_set_scoring = False
 
@@ -275,15 +275,15 @@ warmup_steps_count_ratio = 0.2
 ############################################################
 
 learning_rate_for_each_dataset = [5e-5]
-frozen_layers = 18 # For freezing k-later layers of transformer model
+frozen_layers = 6 # For freezing k-later layers of transformer model
 frozen_embeddings = True # For freezing input embeddings layer of transformer model
 
-model_choice = "microsoft/deberta-v2-xlarge"
+#model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
-#model_choice = "bert-base-uncased"
+model_choice = "bert-base-uncased"
 #model_choice = 't5-base'
 #model_choice = 't5-small'
 #model_choice = "distilbert-base-uncased"

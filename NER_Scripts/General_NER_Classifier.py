@@ -154,8 +154,11 @@ gradient_accumulation_multiplier = 4
 
 ############################################################
 
-model_choice = "google/t5-large-lm-adapt"
-tokenizer = AutoTokenizer.from_pretrained(model_choice)
+model_choice = "microsoft/deberta-v3-large"
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+
+#model_choice = "google/t5-large-lm-adapt"
+#tokenizer = AutoTokenizer.from_pretrained(model_choice)
 
 #model_choice = "microsoft/deberta-v2-xlarge"
 #tokenizer = AutoTokenizer.from_pretrained(model_choice)
@@ -402,7 +405,7 @@ for chosen_learning_rate in learning_rate_choices:
                         for param in module.parameters():
                             param.requires_grad = False
 
-                elif model_choice == "microsoft/deberta-v2-xlarge":
+                elif model_choice in ["microsoft/deberta-v2-xlarge", "microsoft/deberta-v3-large"]:
 
                     #print(model.__dict__)
                     print("Number of Layers: " + str(len(list(model.deberta.encoder.layer))))
@@ -432,7 +435,7 @@ for chosen_learning_rate in learning_rate_choices:
                 elif model_choice == 'allenai/scibert_scivocab_uncased':
                     for param in model.bert.embeddings.parameters():
                         param.requires_grad = False
-                elif model_choice == "microsoft/deberta-v2-xlarge":
+                elif model_choice in ["microsoft/deberta-v2-xlarge", "microsoft/deberta-v3-large"]:
                     for param in model.deberta.embeddings.parameters():
                         param.requires_grad = False
                 else:
@@ -685,10 +688,16 @@ for chosen_learning_rate in learning_rate_choices:
 
         ############################################################
 
-        current_learning_rate_results[dataset + "_micro_f1_average"] =  statistics.mean(micro_averages)
-        current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages)
-        current_learning_rate_results[dataset + "_macro_f1_average"] =  statistics.mean(macro_averages)
-        current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages)
+        if len(micro_averages) > 1:
+            current_learning_rate_results[dataset + "_micro_f1_average"] =  statistics.mean(micro_averages)
+            current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages)
+            current_learning_rate_results[dataset + "_macro_f1_average"] =  statistics.mean(macro_averages)
+            current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages)
+        else:
+            current_learning_rate_results[dataset + "_micro_f1_average"] =  micro_averages[0]
+            current_learning_rate_results[dataset + "_micro_f1_std"] =  0.0
+            current_learning_rate_results[dataset + "_macro_f1_average"] =  macro_averages[0]
+            current_learning_rate_results[dataset + "_macro_f1_std"] =  0.0
 
     ############################################################
     

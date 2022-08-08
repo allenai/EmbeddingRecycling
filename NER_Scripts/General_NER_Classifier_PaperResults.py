@@ -166,7 +166,7 @@ device = torch.device(device)
 num_epochs = 100 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 5 #1 #5
+number_of_runs = 1 #1 #5
 frozen_choice = False
 average_hidden_state = False
 validation_set_scoring = False
@@ -185,13 +185,14 @@ gradient_accumulation_multiplier = 4
 # Select model and hyperparameters here
 ############################################################
 
-frozen_layers = 0 # For freezing k-later layers of transformer model
-frozen_embeddings = False # For freezing input embeddings layer of transformer model
+frozen_layers = 12 # For freezing k-later layers of transformer model
+frozen_embeddings = True # For freezing input embeddings layer of transformer model
 
-classification_datasets = ['NCBI-disease'] #['bc5cdr', 'JNLPBA', 'NCBI-disease']
-learning_rate_for_each_dataset = [5e-6] # Learning rate choices for the bc5cdr, JNLPBA, 
+classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
+learning_rate_for_each_dataset = [1e-5, 1e-5, 5e-6] # Learning rate choices for the bc5cdr, JNLPBA, 
                                                     # and NCBI-disease respectively
 
+#model_choice = "microsoft/deberta-base"
 model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
@@ -450,7 +451,7 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
                         for param in module.parameters():
                             param.requires_grad = False
 
-                elif model_choice == "microsoft/deberta-v2-xlarge":
+                elif model_choice in ["microsoft/deberta-v2-xlarge", "microsoft/deberta-base"]:
 
                     #print(model.__dict__)
                     print("Number of Layers: " + str(len(list(model.deberta.encoder.layer))))
@@ -482,7 +483,7 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
                 elif model_choice == 'allenai/scibert_scivocab_uncased':
                     for param in model.bert.embeddings.parameters():
                         param.requires_grad = False
-                elif model_choice == "microsoft/deberta-v2-xlarge":
+                elif model_choice in ["microsoft/deberta-v2-xlarge", "microsoft/deberta-base"]:
                     for param in model.deberta.embeddings.parameters():
                         param.requires_grad = False
                 else:
@@ -678,33 +679,36 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
             macro_f1_scores.append(macro_f_1_results['f1'] * 100)
             micro_f1_scores.append(micro_f_1_results['f1']  * 100)
 
+            print("Dataset Execution Run Time: " + str((time.time() - execution_start) / number_of_runs))
+
             print("GPU Memory available at the end")
             print(get_gpu_memory())
             print("-----------------------------------------------------------------")
 
             ############################################################
 
-        print("-----------------------------------------------------------------")
-        print("Final Results for Spreadsheet")
-        print("-----------------------------------------------------------------")
-        print("Dataset: " + dataset)
-        print("Model: " + model_choice)
-        print("Number of Runs: " + str(number_of_runs))
-        print("Number of Epochs: " + str(num_epochs))
-        print("Patience: " + str(patience_value))
-        print("Number of Frozen Layers: " + str(frozen_layers))
-        print("Frozen Embeddings: " + str(frozen_embeddings))
-        print("Validation Set Choice: " + str(validation_set_scoring))
-        print("-----------------------------------------------------------------")
+        if len(macro_f1_scores) > 1:
+            print("-----------------------------------------------------------------")
+            print("Final Results for Spreadsheet")
+            print("-----------------------------------------------------------------")
+            print("Dataset: " + dataset)
+            print("Model: " + model_choice)
+            print("Number of Runs: " + str(number_of_runs))
+            print("Number of Epochs: " + str(num_epochs))
+            print("Patience: " + str(patience_value))
+            print("Number of Frozen Layers: " + str(frozen_layers))
+            print("Frozen Embeddings: " + str(frozen_embeddings))
+            print("Validation Set Choice: " + str(validation_set_scoring))
+            print("-----------------------------------------------------------------")
 
-        print("Micro and Macro F1 Scores")
-        print(str(round(statistics.mean(micro_f1_scores), 2)))
-        print(str(round(statistics.mean(macro_f1_scores), 2)))
-        print("-----------------------------------------------------------------")
-        
-        print("Micro and Macro F1 Standard Deviations")
-        print(str(round(statistics.stdev(micro_f1_scores), 2)))
-        print(str(round(statistics.stdev(macro_f1_scores), 2)))
+            print("Micro and Macro F1 Scores")
+            print(str(round(statistics.mean(micro_f1_scores), 2)))
+            print(str(round(statistics.mean(macro_f1_scores), 2)))
+            print("-----------------------------------------------------------------")
+            
+            print("Micro and Macro F1 Standard Deviations")
+            print(str(round(statistics.stdev(micro_f1_scores), 2)))
+            print(str(round(statistics.stdev(macro_f1_scores), 2)))
 
-        print("-----------------------------------------------------------------")
+            print("-----------------------------------------------------------------")
 

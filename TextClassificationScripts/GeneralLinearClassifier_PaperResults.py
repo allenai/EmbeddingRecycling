@@ -167,9 +167,9 @@ device = "cuda:0"
 device = torch.device(device)
 
 num_epochs = 100 #1000 #10
-patience_value = 10 #10 #3
+patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 10 #1 #5
+number_of_runs = 1 #1 #5
 frozen_choice = False
 average_hidden_state = False
 
@@ -189,14 +189,14 @@ gradient_accumulation_multiplier = 8
 ############################################################
 
 classification_datasets = ['chemprot', 'sci-cite', "sciie-relation-extraction"]
-learning_rate_for_each_dataset = [1e-5, 1e-5, 1e-5] # Learning rate choices for the Chemprot, SciCite, 
+learning_rate_for_each_dataset = [1e-5, 1e-5, 2e-5] # Learning rate choices for the Chemprot, SciCite, 
                                                     # and SciERC-Relation respectively
 
-frozen_layers = 0 # For freezing k-later layers of transformer model
-frozen_embeddings = False # For freezing input embeddings layer of transformer model
+frozen_layers = 12 # For freezing k-later layers of transformer model
+frozen_embeddings = True # For freezing input embeddings layer of transformer model
 
-model_choice = "microsoft/deberta-v2-xlarge"
-#model_choice = 'roberta-large'
+#model_choice = "microsoft/deberta-v2-xlarge"
+model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
@@ -613,33 +613,37 @@ for chosen_learning_rate, dataset in zip(learning_rate_for_each_dataset, classif
             macro_f1_scores.append(macro_f_1_results['f1'] * 100)
             micro_f1_scores.append(micro_f_1_results['f1']  * 100)
 
+            print("Dataset Execution Run Time: " + str((time.time() - execution_start) / number_of_runs))
+
             print("GPU Memory available at the end")
             print(get_gpu_memory())
             print("-----------------------------------------------------------------")
 
             ############################################################
 
-        print("-----------------------------------------------------------------")
-        print("Final Results for Spreadsheet")
-        print("-----------------------------------------------------------------")
-        print("Dataset: " + dataset)
-        print("Model: " + model_choice)
-        print("Number of Runs: " + str(number_of_runs))
-        print("Number of Epochs: " + str(num_epochs))
-        print("Patience: " + str(patience_value))
-        print("Number of Frozen Layers: " + str(frozen_layers))
-        print("Frozen Embeddings: " + str(frozen_embeddings))
-        print("Validation Set Choice: " + str(validation_set_scoring))
-        print("-----------------------------------------------------------------")
+        if len(micro_f1_scores) > 1:
 
-        print("Micro and Macro F1 Scores")
-        print(str(round(statistics.mean(micro_f1_scores), 2)))
-        print(str(round(statistics.mean(macro_f1_scores), 2)))
-        print("-----------------------------------------------------------------")
-        
-        print("Micro and Macro F1 Standard Deviations")
-        print(str(round(statistics.stdev(micro_f1_scores), 2)))
-        print(str(round(statistics.stdev(macro_f1_scores), 2)))
+            print("-----------------------------------------------------------------")
+            print("Final Results for Spreadsheet")
+            print("-----------------------------------------------------------------")
+            print("Dataset: " + dataset)
+            print("Model: " + model_choice)
+            print("Number of Runs: " + str(number_of_runs))
+            print("Number of Epochs: " + str(num_epochs))
+            print("Patience: " + str(patience_value))
+            print("Number of Frozen Layers: " + str(frozen_layers))
+            print("Frozen Embeddings: " + str(frozen_embeddings))
+            print("Validation Set Choice: " + str(validation_set_scoring))
+            print("-----------------------------------------------------------------")
 
-        print("-----------------------------------------------------------------")
+            print("Micro and Macro F1 Scores")
+            print(str(round(statistics.mean(micro_f1_scores), 2)))
+            print(str(round(statistics.mean(macro_f1_scores), 2)))
+            print("-----------------------------------------------------------------")
+            
+            print("Micro and Macro F1 Standard Deviations")
+            print(str(round(statistics.stdev(micro_f1_scores), 2)))
+            print(str(round(statistics.stdev(macro_f1_scores), 2)))
+
+            print("-----------------------------------------------------------------")
 

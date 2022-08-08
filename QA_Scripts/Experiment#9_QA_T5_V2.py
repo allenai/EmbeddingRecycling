@@ -51,10 +51,14 @@ model_choice = "google/t5-large-lm-adapt"
 
 bottleneck_value = 256
 use_all_adapter = True
+freeze_entire_encoder = True
 
-learning_rate_choices = [1e-4]
+learning_rate_choices = [0.0001, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
-runs = 3
+runs = 1
+
+exact_match_scores = []
+f1_scores = []
 
 ###############################################################
 
@@ -66,6 +70,9 @@ if model_choice in ["google/t5-large-lm-adapt"]:
 	starting_layer_for_adapters = 12
 	if use_all_adapter == True:
 		starting_layer_for_adapters = 0
+
+	if freeze_entire_encoder == True:
+		starting_layer_for_adapters = 24
 
 	#unfrozen_components.append('encoder')
 

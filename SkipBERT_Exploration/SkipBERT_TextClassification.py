@@ -1,9 +1,8 @@
 
 
-
 import torch.nn as nn
 from transformers import T5Tokenizer, T5EncoderModel, T5ForConditionalGeneration
-from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer
+from transformers import BertModel, AutoTokenizer, AutoModel, GPT2Tokenizer, BertTokenizerFast, BertConfig
 #import tensorflow as tf
 
 import pandas as pd
@@ -34,7 +33,15 @@ import random
 
 #############################################################
 
-random_state = 42
+import psutil
+import skipbert
+#from skipbert import *
+from skipbert.modeling import SkipBertModel
+import time
+
+#############################################################
+
+random_state = 43
 
 np.random.seed(random_state)
 random.seed(random_state)
@@ -51,11 +58,94 @@ def get_gpu_memory():
 
 ############################################################
 
+class CustomBERTModel(nn.Module):
+    def __init__(self, number_of_labels, model_choice, dropout_layer, frozen, 
+                 frozen_layer_count, average_hidden_state, frozen_embeddings):
+
+          super(CustomBERTModel, self).__init__()
+
+          ################################################
+
+          PATH_TO_MODEL = "skipbert-L6-6"
+          config = BertConfig.from_pretrained(PATH_TO_MODEL)
+
+          print("config.max_num_entries")
+          print(config.max_num_entries)
+
+          config.num_full_hidden_layers = 6
+          config.model_type = model_choice
+          config.vocab_size = 31090
+
+          #print(config)
+
+          config.plot_mode = 'plot_passive'
+          model = SkipBertModel.from_pretrained(model_choice, config=config)#.to(device)
+
+          model_encoding = SkipBertModel.from_pretrained(model_choice)
+          embedding_size = 768
+          self.encoderModel = model_encoding
+
+          ################################################
+
+          if frozen == True:
+            print("Freezing the model parameters")
+            for param in self.encoderModel.parameters():
+                param.requires_grad = False
+
+
+
+          if frozen_layer_count > 0:
+
+            print("Number of Layers: " + str(len(list(self.encoderModel.encoder.layer))))
+
+            layers_to_freeze = self.encoderModel.encoder.layer[:frozen_layer_count]
+            for module in layers_to_freeze:
+                for param in module.parameters():
+                    param.requires_grad = False
+
+
+
+          
+          if frozen_embeddings == True:
+
+            print("Frozen Embeddings Layer")
+            for param in self.encoderModel.embeddings.parameters():
+                param.requires_grad = False
+
+          self.classifier = nn.Sequential(
+                                            nn.Linear(in_features=embedding_size, out_features=256, bias=True),
+                                            nn.Linear(in_features=256, out_features=number_of_labels, bias=True)
+                                         )
+
+
+          
+
+    def forward(self, ids, mask, decoder_input_ids=None):
+          
+        outputs = self.encoderModel(input_ids=ids, attention_mask=mask)#
+
+        #print("outputs")
+        #print(len(outputs))
+        #print(outputs[0].shape)
+        #print(outputs[1].shape)
+        #print(len(outputs[2]))
+        #print((outputs[2][0].shape))
+        #print(len(outputs[3]))
+        #print((outputs[3][0].shape))
+
+        #print(outputs[1])
+
+        return outputs[1]
+
+
+
+############################################################
+
 device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-classification_datasets = ['chemprot', 'sci-cite', "sciie-relation-extraction"] #["sciie-relation-extraction", "mag"]
+classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 
 num_epochs = 100 #1000 #10
 patience_value = 5 #10 #3
@@ -63,22 +153,24 @@ current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 24 #12 layers for BERT total, 24 layers for T5 and RoBERTa, 48 for DeBERTa XXL
-frozen_embeddings = True
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa, 48 for DeBERTa XXL
+frozen_embeddings = False
 average_hidden_state = False
 
-validation_set_scoring = False
-assigned_batch_size = 4
-gradient_accumulation_multiplier = 8
+validation_set_scoring = True
+assigned_batch_size = 8
+gradient_accumulation_multiplier = 4
 
 num_warmup_steps = 100
 
-############################################################
+learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
-learning_rate_choices = [1e-3, 2e-3] 
+mlp_classifier = False
+
+############################################################
  
-model_choice = "google/t5-large-lm-adapt"
-tokenizer = AutoTokenizer.from_pretrained(model_choice)
+model_choice = 'allenai/scibert_scivocab_uncased'
+tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 ############################################################
 
@@ -117,7 +209,7 @@ for chosen_learning_rate in learning_rate_choices:
 
         checkpoint_path = "checkpoints/" + model_choice.replace("/", "-") + "/" + dataset + "/" + str(chosen_learning_rate) + "_"
         checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
-        checkpoint_path += str(validation_set_scoring) + ".pt"
+        checkpoint_path += str(validation_set_scoring) + "_" + str(mlp_classifier) + ".pt"
 
         print("GPU Memory available at the start")
         print(get_gpu_memory())
@@ -138,16 +230,17 @@ for chosen_learning_rate in learning_rate_choices:
         print("Validation Set Choice: " + str(validation_set_scoring))
         print("Number of Epochs: " + str(num_epochs))
         print("Number of warmup steps: " + str(num_warmup_steps))
+        print("MLP Classifier: " + str(mlp_classifier))
 
         # Chemprot train, dev, and test
-        with open('text_classification/' + dataset + '/train.txt') as f:
+        with open('../EmbeddingRecycling/text_classification/' + dataset + '/train.txt') as f:
 
             train_set = f.readlines()
             train_set = [ast.literal_eval(line) for line in train_set]
             train_set_text = [line['text'] for line in train_set]
             train_set_label = [line['label'] for line in train_set]
 
-        with open('text_classification/' + dataset + '/dev.txt') as f:
+        with open('../EmbeddingRecycling/text_classification/' + dataset + '/dev.txt') as f:
             
             dev_set = f.readlines()
             dev_set = [ast.literal_eval(line) for line in dev_set]
@@ -163,7 +256,7 @@ for chosen_learning_rate in learning_rate_choices:
                 else:
                     print("Found the error with category")
 
-        with open('text_classification/' + dataset + '/test.txt') as f:
+        with open('../EmbeddingRecycling/text_classification/' + dataset + '/test.txt') as f:
             
             test_set = f.readlines()
             test_set = [ast.literal_eval(line) for line in test_set]
@@ -204,15 +297,15 @@ for chosen_learning_rate in learning_rate_choices:
 
         else:
 
-            training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:100]
+            training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
             training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
             training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
 
-            validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:100]
+            validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
             validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
             validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 
-            test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})#[:100]
+            test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
             test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
             test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
 
@@ -251,24 +344,8 @@ for chosen_learning_rate in learning_rate_choices:
 
             ############################################################
 
-            model = T5ForConditionalGeneration.from_pretrained(model_choice)
-
-            if frozen_layers > 0:
-
-                print("Freezing T5-3b")
-                print("Number of Layers: " + str(len(model.encoder.block)))
-
-                for parameter in model.encoder.embed_tokens.parameters():
-                    parameter.requires_grad = False
-
-                for i, m in enumerate(model.encoder.block):        
-                    #Only un-freeze the last n transformer blocks
-                    if i+1 > 24 - frozen_layers:
-                        print(str(i) + " Layer")
-                        for parameter in m.parameters():
-                            parameter.requires_grad = False
-
-            ############################################################
+            model = CustomBERTModel(len(set(train_set_label)), model_choice, current_dropout, 
+                                    frozen_choice, frozen_layers, average_hidden_state, frozen_embeddings)
 
             model.to(device)
 
@@ -330,11 +407,20 @@ for chosen_learning_rate in learning_rate_choices:
 
                     #with torch.no_grad():
                     
-                        new_batch = {'input_ids': batch['input_ids'].to(device), 
-                        			 'attention_mask': batch['attention_mask'].to(device),
-                        			 'labels': batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)}
+                        #batch = {k: v.to(device) for k, v in batch.items()}
 
-                        loss = model(input_ids=new_batch['input_ids'], attention_mask=new_batch['attention_mask'], labels=new_batch['labels']).loss
+                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
+
+                        if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
+                            new_batch['decoder_input_ids'] = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
+
+                        outputs = model(**new_batch)
+
+                        #print("Example outputs")
+                        #print(outputs)
+                        #print(labels)
+
+                        loss = criterion(outputs, batch['labels'].to(device))
 
                         loss.backward()
 
@@ -355,12 +441,17 @@ for chosen_learning_rate in learning_rate_choices:
 
                     #with torch.no_grad():
                     
-                        new_batch = {'input_ids': batch['input_ids'].to(device), 
-                        			 'attention_mask': batch['attention_mask'].to(device),
-                        			 'labels': batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)}
+                        #batch = {k: v.to(device) for k, v in batch.items()}
+                        #labels = batch['labels']
 
-                        loss = model(input_ids=new_batch['input_ids'], labels=new_batch['labels']).loss
+                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
 
+                        if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
+                            new_batch['decoder_input_ids'] = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
+                        
+                        outputs = model(**new_batch)
+
+                        loss = criterion(outputs, batch['labels'].to(device))
                         progress_bar.update(1)
 
                         valid_losses.append(loss.item())
@@ -425,25 +516,16 @@ for chosen_learning_rate in learning_rate_choices:
 
                 with torch.no_grad():
 
-                    inputs = batch['input_ids'].to(device)
-                    attention_mask = batch['attention_mask'].to(device)
-                    labels = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
-                    #decoder_attention_mask = batch['decoder_attention_mask'].to(device)
+                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
 
-                    outputs = model(input_ids=inputs,
-                            		attention_mask=attention_mask,
-                            		labels=labels)
-                            		#decoder_attention_mask=b_target_mask)
+                    if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
+                        new_batch['decoder_input_ids'] = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
 
-                    #print("inference comparison")
-                    #print(batch.keys())
-                    #print(outputs.keys())
-                    #print(torch.argmax(outputs.logits, dim=-1))
-                    #print(torch.argmax(outputs.logits, dim=-1).shape)
-                    #print(outputs.logits.shape)
-                    #print(labels)
+                    outputs = model(**new_batch)
 
-                    logits = outputs.logits
+                    #labels = batch['labels'].to(device)
+
+                    logits = outputs
                     predictions = torch.argmax(logits, dim=-1)
                     metric.add_batch(predictions=predictions, references=batch['labels'].to(device))
 
@@ -460,14 +542,10 @@ for chosen_learning_rate in learning_rate_choices:
 
             ############################################################
 
-            total_predictions = total_predictions.reshape(len(total_predictions))
-
             print("--------------------------")
             print("Predictions Shapes")
             print(total_predictions.shape)
             print(total_references.shape)
-            #print(total_predictions)
-            #print(total_references)
 
             results = metric.compute(references=total_references, predictions=total_predictions)
             print("Accuracy for Test Set: " + str(results['accuracy']))
@@ -503,11 +581,15 @@ for chosen_learning_rate in learning_rate_choices:
         ############################################################
 
         if len(micro_averages) > 1:
-
-        	current_learning_rate_results[dataset + "_micro_f1_average"] =  statistics.mean(micro_averages)
-        	current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages)
-        	current_learning_rate_results[dataset + "_macro_f1_average"] =  statistics.mean(macro_averages)
-        	current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages)
+            current_learning_rate_results[dataset + "_micro_f1_average"] =  statistics.mean(micro_averages)
+            current_learning_rate_results[dataset + "_micro_f1_std"] =  statistics.stdev(micro_averages)
+            current_learning_rate_results[dataset + "_macro_f1_average"] =  statistics.mean(macro_averages)
+            current_learning_rate_results[dataset + "_macro_f1_std"] =  statistics.stdev(macro_averages)
+        else:
+            current_learning_rate_results[dataset + "_micro_f1_average"] =  micro_averages[0]
+            current_learning_rate_results[dataset + "_micro_f1_std"] =  0
+            current_learning_rate_results[dataset + "_macro_f1_average"] =  macro_averages[0]
+            current_learning_rate_results[dataset + "_macro_f1_std"] =  0
 
     ############################################################
     

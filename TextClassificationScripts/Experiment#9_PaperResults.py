@@ -54,12 +54,10 @@ def get_gpu_memory():
 device = "cuda:0"
 device = torch.device(device)
 
-classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
-
 num_epochs = 100 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 5 #1 #5
+number_of_runs = 1 #1 #5
 frozen_choice = False
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
@@ -83,16 +81,18 @@ gradient_accumulation_multiplier = 4
 
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 
-chosen_learning_rate_choices = [1e-5, 1e-4, 1e-5] # Learning rate choices for the Chemprot, SciCite, 
+classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
+chosen_learning_rate_choices = [1e-4, 2e-4, 2e-4] # Learning rate choices for the Chemprot, SciCite, 
                                                   # and SciERC-Relation respectively
 chosen_bottleneck_values = [256, 256, 256] # Bottleneck dimension choices for the Chemprot, SciCite, 
                                            # and SciERC-Relation respectively
 
-#model_choice = 'roberta-large'
+model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
-model_choice = "microsoft/deberta-v2-xlarge"
+#model_choice = "microsoft/deberta-v2-xlarge"
+#model_choice = "distilbert-base-uncased"
 
-use_all_adapter = True
+use_all_adapter = False
 
 ############################################################
 

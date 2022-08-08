@@ -166,7 +166,7 @@ device = torch.device(device)
 num_epochs = 15 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
-number_of_runs = 3 #1 #5
+number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
@@ -189,9 +189,10 @@ delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 bottleneck_value = 256
 
 use_all_adapter = True
+freeze_entire_encoder = True
 
 warmup_steps_count_ratio = 0.2
-learning_rate_choices = [1e-4] [0.0001, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-3, 2e-3, 0.0001, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6] #[0.0001, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
 model_choice = "google/t5-large-lm-adapt"
 
@@ -225,6 +226,9 @@ if model_choice in ["google/t5-large-lm-adapt"]:
 	starting_layer_for_adapters = 12
 	if use_all_adapter == True:
 		starting_layer_for_adapters = 0
+
+	if freeze_entire_encoder == True:
+		starting_layer_for_adapters = 24
 
 	#unfrozen_components.append('encoder')
 

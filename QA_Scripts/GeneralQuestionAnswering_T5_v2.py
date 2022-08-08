@@ -47,11 +47,11 @@ device = torch.device(device)
 #model_choice = "t5-base"
 model_choice = "google/t5-large-lm-adapt"
 
-frozen_layers = 0
+frozen_layers = 24
 
-runs = 3
+runs = 1
 
-learning_rate_choices = [5e-5]
+learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
 exact_match_scores = []
 f1_scores = []

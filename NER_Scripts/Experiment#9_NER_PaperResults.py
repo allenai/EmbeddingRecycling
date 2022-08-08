@@ -353,7 +353,7 @@ device = torch.device(device)
 num_epochs = 100 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 5 #1 #5
+number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate =  0.0001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
@@ -427,7 +427,7 @@ if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
     	unfrozen_components.append(attention_adapter)
     	unfrozen_components.append(output_adapter)
 
-elif model_choice == 'allenai/scibert_scivocab_uncased':
+elif model_choice in ['allenai/scibert_scivocab_uncased', "microsoft/deberta-base"]:
 
     unfrozen_components = ['classifier']
 

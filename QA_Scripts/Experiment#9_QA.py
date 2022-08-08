@@ -35,7 +35,7 @@ class CustomBERTModel(nn.Module):
 
           super(CustomBERTModel, self).__init__()
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
-          if model_choice == "roberta-large":
+          if model_choice in ["roberta-large", "microsoft/deberta-v3-large"]:
 
             model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
@@ -254,9 +254,10 @@ use_all_adapter = True
 
 warmup_steps_count_ratio = 0.2
 #learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
-learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6] #1e-3, 3e-3, 
+learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6] #1e-3, 3e-3, 
 
-model_choice = "microsoft/deberta-v2-xlarge"
+model_choice = "microsoft/deberta-v3-large"
+#model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
@@ -267,7 +268,7 @@ model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = "distilbert-base-uncased"
 
-checkpoint_path = 'checkpoints/experiment9_QA_20000.pt'
+checkpoint_path = 'checkpoints/experiment9_QA_30001.pt'
 
 chosen_dataset = 'trivia_qa'
 #chosen_dataset = 'natural_questions'
@@ -285,7 +286,7 @@ reduced_sample = False
 
 ############################################################
 
-if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
+if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge", "microsoft/deberta-v3-large"]:
 
 	unfrozen_components = ['classifier']
 	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)

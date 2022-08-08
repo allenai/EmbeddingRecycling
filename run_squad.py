@@ -71,46 +71,56 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 def convertModelToAdaptersModel(current_model, sequence_classification_model, model_choice, bottleneck_value_choice, use_all_adapter):
 
-	if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
+    if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge", "microsoft/deberta-v3-large"]:
 
-		unfrozen_components = ['classifier']
+        unfrozen_components = ['classifier']
 
-		starting_layer_for_adapters = 12
-		if use_all_adapter == True:
-			starting_layer_for_adapters = 0
+        #use_all_adapter = False
 
-		for i in range(starting_layer_for_adapters, 24):
-			attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
-			output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
-			unfrozen_components.append(attention_adapter)
-			unfrozen_components.append(output_adapter)
+        print("use_all_adapter")
+        print(use_all_adapter)
 
-	elif model_choice == "bert-base-uncased":
+        starting_layer_for_adapters = 12
+        if use_all_adapter == True:
+            starting_layer_for_adapters = 0
 
-		unfrozen_components = ['classifier']
+        for i in range(starting_layer_for_adapters, 24):
+            attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
+            output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
+            unfrozen_components.append(attention_adapter)
+            unfrozen_components.append(output_adapter)
 
-		starting_layer_for_adapters = 6
-		if use_all_adapter == True:
-			starting_layer_for_adapters = 0
+    elif model_choice == "bert-base-uncased":
 
-		for i in range(starting_layer_for_adapters, 12):
-			attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
-			output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
-			unfrozen_components.append(attention_adapter)
-			unfrozen_components.append(output_adapter) 
+        unfrozen_components = ['classifier']
+
+        starting_layer_for_adapters = 6
+        if use_all_adapter == True:
+            starting_layer_for_adapters = 0
+
+        for i in range(starting_layer_for_adapters, 12):
+            attention_adapter = 'encoder.layer.' + str(i) + ".attention.adapter"
+            output_adapter = 'encoder.layer.' + str(i) + ".output.adapter"
+            unfrozen_components.append(attention_adapter)
+            unfrozen_components.append(output_adapter) 
 
 	########################################################
 
-	delta_model = AdapterModel(backbone_model=sequence_classification_model, bottleneck_dim=bottleneck_value_choice)
-	delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
-	delta_model.log()
+    delta_model = AdapterModel(backbone_model=sequence_classification_model, bottleneck_dim=bottleneck_value_choice)
+    delta_model.freeze_module(exclude=unfrozen_components, set_state_dict=True)
+    delta_model.log()
 
-	if model_choice == "bert-base-uncased":
+    if model_choice == "bert-base-uncased":
 
-		current_model.embeddings = delta_model.backbone_model.bert.embeddings
-		current_model.encoder = delta_model.backbone_model.bert.encoder
+        current_model.embeddings = delta_model.backbone_model.bert.embeddings
+        current_model.encoder = delta_model.backbone_model.bert.encoder
 
-	return current_model
+    else:
+
+        current_model.embeddings = delta_model.backbone_model.deberta.embeddings
+        current_model.encoder = delta_model.backbone_model.deberta.encoder
+
+    return current_model
 
 
 

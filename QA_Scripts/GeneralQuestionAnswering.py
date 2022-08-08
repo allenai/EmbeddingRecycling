@@ -33,7 +33,7 @@ class CustomBERTModel(nn.Module):
 
           super(CustomBERTModel, self).__init__()
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
-          if model_choice == "roberta-large":
+          if model_choice in ["roberta-large", "microsoft/deberta-v3-large"]:
 
             model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
@@ -256,14 +256,14 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-num_epochs = 10 #1000 #10
+num_epochs = 15 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
-frozen_embeddings = False
+frozen_layers = 24 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_embeddings = True
 average_hidden_state = False
 
 assigned_batch_size = 4
@@ -284,7 +284,10 @@ warmup_steps_count_ratio = 0.2
 #learning_rate_choices = [1e-3, 2e-3, 5e-3, 1e-4, 2e-4, 5e-4]
 learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6]
 
-model_choice = "microsoft/deberta-v2-xlarge"
+checkpoint_path = 'checkpoints/general_QA_30000.pt'
+
+model_choice = "microsoft/deberta-v3-large"
+#model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
@@ -292,10 +295,6 @@ model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 't5-base'
 #model_choice = 't5-small'
 #model_choice = 'google/t5-v1_1-small'
-
-
-
-checkpoint_path = 'checkpoints/general_QA_15003.pt'
 
 chosen_dataset = 'trivia_qa'
 #chosen_dataset = 'natural_questions'

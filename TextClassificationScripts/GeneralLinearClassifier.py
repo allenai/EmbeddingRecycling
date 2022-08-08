@@ -33,7 +33,7 @@ import random
 
 #############################################################
 
-random_state = 42
+random_state = 43
 
 np.random.seed(random_state)
 random.seed(random_state)
@@ -216,7 +216,7 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-classification_datasets = ['chemprot', 'sci-cite', "sciie-relation-extraction"] #["sciie-relation-extraction", "mag"]
+classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 
 num_epochs = 100 #1000 #10
 patience_value = 5 #10 #3
@@ -224,8 +224,8 @@ current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa, 48 for DeBERTa XXL
-frozen_embeddings = False
+frozen_layers = 12 #12 layers for BERT total, 24 layers for T5 and RoBERTa, 48 for DeBERTa XXL
+frozen_embeddings = True
 average_hidden_state = False
 
 validation_set_scoring = True
@@ -259,9 +259,6 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = 'microsoft/deberta-v3-xsmall'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'distilroberta-base'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
 #model_choice = 'sentence-transformers/sentence-t5-base'

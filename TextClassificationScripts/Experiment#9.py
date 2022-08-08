@@ -61,7 +61,7 @@ classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 num_epochs = 100 #1000 #10
 patience_value = 10 #10 #3
 current_dropout = True
-number_of_runs = 1 #1 #5
+number_of_runs = 3 #1 #5
 frozen_choice = False
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
@@ -79,20 +79,21 @@ learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 bottleneck_value = 256
 
+model_choice = "microsoft/deberta-v3-large"
 #model_choice = 'roberta-large'
-model_choice = "microsoft/deberta-v2-xlarge"
+#model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = "distilbert-base-uncased"
 
-checkpoint_path = 'checkpoints/experiment9_checkpoint17000.pt'
+checkpoint_path = 'checkpoints/experiment9_checkpoint18000.pt'
 
-use_all_adapter = True
+use_all_adapter = False
 
 ############################################################
 
-if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
+if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge", "microsoft/deberta-v3-large"]:
 
 	unfrozen_components = ['classifier']
 	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)

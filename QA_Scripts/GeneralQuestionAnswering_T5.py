@@ -171,8 +171,8 @@ current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 5e-6 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
-frozen_embeddings = False
+frozen_layers = 24 #12 layers for BERT total, 24 layers for T5 and RoBERTa
+frozen_embeddings = True
 average_hidden_state = False
 
 assigned_batch_size = 4
@@ -188,15 +188,15 @@ validation_set_scoring = False
 
 warmup_steps_count_ratio = 0.2
 
-learning_rate_choices = [1e-3, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
 
 model_choice = "google/t5-large-lm-adapt"
 
 
-checkpoint_path = 'checkpoints/T5_QA_13003.pt'
+checkpoint_path = 'checkpoints/T5_QA_14000.pt'
 
-#chosen_dataset = 'trivia_qa'
-chosen_dataset = 'squad'
+chosen_dataset = 'trivia_qa'
+#chosen_dataset = 'squad'
 
 context_cutoff_count = 1024
 context_token_count = 512

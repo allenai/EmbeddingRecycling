@@ -259,11 +259,12 @@ bottleneck_value = 256 # Bottleneck dimension choice
 
 warmup_steps_count_ratio = 0.2
 
-learning_rate_for_each_dataset = [2e-5]
+learning_rate_for_each_dataset = [1e-4]
 
-model_choice = "microsoft/deberta-v2-xlarge"
+#model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'roberta-large'
-#model_choice = "bert-base-uncased"
+model_choice = "bert-base-uncased"
+#model_choice = "distilbert-base-uncased"
 
 chosen_dataset = 'trivia_qa'
 

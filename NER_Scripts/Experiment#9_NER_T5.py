@@ -264,7 +264,7 @@ number_of_warmup_steps = 100
 
 #learning_rate_choices = [0.0001, 1e-5, 2e-5, 5e-5, 5e-6]#[0.0001, 1e-5, 2e-5, 5e-5, 5e-6]
 #learning_rate_choices = [0.001, 0.003, 0.0002]
-learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-3, 2e-3]
 #learning_rate_choices = [1e-3, 2e-3, 5e-3]
 
 ############################################################
@@ -278,6 +278,7 @@ delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 bottleneck_value = 256
 
 use_all_adapter = False
+freeze_entire_encoder = True
 
 model_choice = "google/t5-large-lm-adapt"
 
@@ -294,27 +295,30 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
 if model_choice in ["google/t5-large-lm-adapt"]:
 
-	unfrozen_components = ['lm_head']
+    unfrozen_components = ['lm_head']
 	#unfrozen_components = []
-	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
+    tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-	starting_layer_for_adapters = 12
-	if use_all_adapter == True:
-		starting_layer_for_adapters = 0
+    starting_layer_for_adapters = 12
+    if use_all_adapter == True:
+        starting_layer_for_adapters = 0
+
+    if freeze_entire_encoder == True:
+        starting_layer_for_adapters = 24
 
 	#unfrozen_components.append('encoder')
 
-	for i in range(starting_layer_for_adapters, 24):
-		attention_adapter = 'encoder.block.' + str(i) + ".layer.0.adapter"
-		output_adapter = 'encoder.block.' + str(i) + ".layer.1.adapter"
-		unfrozen_components.append(attention_adapter)
-		unfrozen_components.append(output_adapter)
+    for i in range(starting_layer_for_adapters, 24):
+        attention_adapter = 'encoder.block.' + str(i) + ".layer.0.adapter"
+        output_adapter = 'encoder.block.' + str(i) + ".layer.1.adapter"
+        unfrozen_components.append(attention_adapter)
+        unfrozen_components.append(output_adapter)
 
-	for i in range(0, 24):
-		attention_adapter = 'decoder.block.' + str(i) + ".layer.0.adapter"
-		output_adapter = 'decoder.block.' + str(i) + ".layer.2.adapter"
-		unfrozen_components.append(attention_adapter)
-		unfrozen_components.append(output_adapter)
+    for i in range(0, 24):
+        attention_adapter = 'decoder.block.' + str(i) + ".layer.0.adapter"
+        output_adapter = 'decoder.block.' + str(i) + ".layer.2.adapter"
+        unfrozen_components.append(attention_adapter)
+        unfrozen_components.append(output_adapter)
 
 
 ############################################################
