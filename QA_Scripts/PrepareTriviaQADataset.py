@@ -237,10 +237,10 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-model_choice = "microsoft/deberta-v3-large"
+#model_choice = "microsoft/deberta-v3-large"
 #model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = "google/t5-large-lm-adapt"
-#model_choice = 'roberta-large'
+model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = "distilbert-base-uncased"

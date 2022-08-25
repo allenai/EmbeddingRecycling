@@ -53,7 +53,7 @@ bottleneck_value = 256
 use_all_adapter = True
 freeze_entire_encoder = True
 
-learning_rate_choices = [0.0001, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [1e-5, 2e-5, 5e-5, 5e-6]
 
 runs = 1
 

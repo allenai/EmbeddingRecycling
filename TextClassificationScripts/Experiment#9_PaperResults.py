@@ -57,7 +57,7 @@ device = torch.device(device)
 num_epochs = 100 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 1 #1 #5
+number_of_runs = 5 #1 #5
 frozen_choice = False
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
 frozen_embeddings = False
@@ -82,17 +82,18 @@ gradient_accumulation_multiplier = 4
 delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
 
 classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
-chosen_learning_rate_choices = [1e-4, 2e-4, 2e-4] # Learning rate choices for the Chemprot, SciCite, 
+chosen_learning_rate_choices = [1e-5, 2e-5, 1e-5] # Learning rate choices for the Chemprot, SciCite, 
                                                   # and SciERC-Relation respectively
 chosen_bottleneck_values = [256, 256, 256] # Bottleneck dimension choices for the Chemprot, SciCite, 
                                            # and SciERC-Relation respectively
 
-model_choice = 'roberta-large'
+model_choice = "microsoft/deberta-v3-large"
+#model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = "distilbert-base-uncased"
 
-use_all_adapter = False
+use_all_adapter = True
 
 ############################################################
 
@@ -105,7 +106,7 @@ use_all_adapter = False
 
 ############################################################
 
-if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
+if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge", "microsoft/deberta-v3-large"]:
 
 	unfrozen_components = ['classifier']
 	tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
@@ -144,7 +145,7 @@ def tokenize_function(examples):
 
 ############################################################
 
-dataset_folder_path = "paper_results/"
+dataset_folder_path = "/net/nfs.cirrascale/s2-research/jons/paper_results/"
 
 if not os.path.isdir(dataset_folder_path):
 
@@ -300,7 +301,7 @@ for chosen_learning_rate, bottleneck_value, dataset in zip(chosen_learning_rate_
 
 	    for i in range(0, number_of_runs):
 
-	        checkpoint_path = "paper_results/" + model_choice.replace("/", "-") + "/" + dataset + "/experiment9_" + str(chosen_learning_rate) + "_"
+	        checkpoint_path = "/net/nfs.cirrascale/s2-research/jons/paper_results/" + model_choice.replace("/", "-") + "/" + dataset + "/experiment9_" + str(chosen_learning_rate) + "_"
 	        checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
 	        checkpoint_path += str(validation_set_scoring) + "_Run_" + str(i) + ".pt"
 

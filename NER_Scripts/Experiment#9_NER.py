@@ -372,9 +372,9 @@ bottleneck_value = 256
 
 number_of_warmup_steps = 100
 
-model_choice = "microsoft/deberta-v3-large"
+#model_choice = "microsoft/deberta-v3-large"
 #model_choice = "microsoft/deberta-v2-xlarge"
-#model_choice = 'roberta-large'
+model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
@@ -572,6 +572,9 @@ for chosen_learning_rate in learning_rate_choices:
         tokenized_datasets = tokenized_datasets.remove_columns(["tokens", "ner_tags"])
         #tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
         tokenized_datasets.set_format("torch")
+
+        #print("Saving " + dataset + " dataset for " + str(model_choice))
+        #tokenized_datasets.save_to_disk(model_choice + "_" + dataset + "_preprocessed_dataset")
 
 
         ############################################################

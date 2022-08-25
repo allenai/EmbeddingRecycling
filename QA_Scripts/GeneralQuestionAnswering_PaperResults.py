@@ -33,7 +33,7 @@ class CustomBERTModel(nn.Module):
 
           super(CustomBERTModel, self).__init__()
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
-          if model_choice == "roberta-large":
+          if model_choice in ["roberta-large", "microsoft/deberta-v3-large"]:
 
             model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
@@ -247,15 +247,15 @@ device = "cuda:0"
 #device = "cpu"
 device = torch.device(device)
 
-num_epochs = 10 #1000 #10
+num_epochs = 15 #1000 #10
 patience_value = 3 #10 #3
 current_dropout = True
-number_of_runs = 3 #1 #5
+number_of_runs = 5 #1 #5
 frozen_choice = False
 average_hidden_state = False
 
-assigned_batch_size = 2
-gradient_accumulation_multiplier = 16
+assigned_batch_size = 4
+gradient_accumulation_multiplier = 8
 
 validation_set_scoring = False
 
@@ -274,16 +274,17 @@ warmup_steps_count_ratio = 0.2
 # Select model and hyperparameters here
 ############################################################
 
-learning_rate_for_each_dataset = [5e-5]
-frozen_layers = 6 # For freezing k-later layers of transformer model
-frozen_embeddings = True # For freezing input embeddings layer of transformer model
+learning_rate_for_each_dataset = [1e-5]
+frozen_layers = 0 # For freezing k-later layers of transformer model
+frozen_embeddings = False # For freezing input embeddings layer of transformer model
 
+model_choice = "microsoft/deberta-v3-large"
 #model_choice = "microsoft/deberta-v2-xlarge"
 #model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
-model_choice = "bert-base-uncased"
+#model_choice = "bert-base-uncased"
 #model_choice = 't5-base'
 #model_choice = 't5-small'
 #model_choice = "distilbert-base-uncased"

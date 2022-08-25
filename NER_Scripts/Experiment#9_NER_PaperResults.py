@@ -56,7 +56,7 @@ class CustomBERTModel(nn.Module):
 
           super(CustomBERTModel, self).__init__()
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
-          if model_choice == "roberta-large":
+          if model_choice in ["roberta-large", "microsoft/deberta-v3-large"]:
 
             model_encoding = AutoModelForSequenceClassification.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
@@ -193,7 +193,7 @@ class CustomBERTModel(nn.Module):
                 extended_attention_mask = self.encoderModel.get_extended_attention_mask(mask, embeddings.size()[:-1], device)
                 last_hidden_state = self.encoderModel.roberta.encoder(embeddings, extended_attention_mask)['last_hidden_state']
 
-            elif model_choice == "microsoft/deberta-v2-xlarge":
+            elif model_choice in ["microsoft/deberta-v2-xlarge", "microsoft/deberta-v3-large"]:
 
                 embeddings = self.encoderModel.deberta.embeddings(ids)
                 #extended_attention_mask = self.encoderModel.get_extended_attention_mask(mask, embeddings.size()[:-1], device)
@@ -353,7 +353,7 @@ device = torch.device(device)
 num_epochs = 100 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 1 #1 #5
+number_of_runs = 5 #1 #5
 frozen_choice = False
 #chosen_learning_rate =  0.0001 #0.001, 0.0001, 1e-5, 5e-5, 5e-6
 frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa
@@ -380,7 +380,7 @@ number_of_warmup_steps = 100
 
 classification_datasets = ['bc5cdr', 'JNLPBA', 'NCBI-disease']
 
-chosen_learning_rate_choices = [5e-6, 5e-6, 5e-5] # Learning rate choices for the bc5cdr, JNLPBA, 
+chosen_learning_rate_choices = [1e-4, 5e-5, 2e-5] # Learning rate choices for the bc5cdr, JNLPBA, 
                                                   # and NCBI-disease respectively
 chosen_bottleneck_values = [256, 256, 256] # Bottleneck dimension choices for the Chemprot, SciCite, 
                                           # and SciERC-Relation respectively
@@ -389,9 +389,10 @@ delta_model_choice = 'Adapter' #'Adapter' #'BitFit'
  
 #model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
-model_choice = "microsoft/deberta-v2-xlarge"
+#model_choice = "microsoft/deberta-v2-xlarge"
+model_choice = "microsoft/deberta-v3-large"
 
-adapters_on_all_layers = False
+adapters_on_all_layers = True
 
 ############################################################
 
@@ -413,7 +414,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_choice, add_prefix_space=True)
 
 ############################################################
 
-if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge"]:
+if model_choice in ['roberta-large', "microsoft/deberta-v2-xlarge", "microsoft/deberta-v3-large"]:
 
     unfrozen_components = ['classifier']
 

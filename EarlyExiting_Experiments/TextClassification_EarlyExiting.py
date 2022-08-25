@@ -58,43 +58,43 @@ class CustomBERTModel(nn.Module):
           #self.bert = AutoModel.from_pretrained("allenai/scibert_scivocab_uncased")
           if model_choice in ["t5-3b"]:
 
-            model_encoding = T5EncoderModel.from_pretrained(model_choice)
+            model_encoding = T5EncoderModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
             self.encoderModel = model_encoding
 
           elif model_choice in ["roberta-large", "google/t5-large-lm-adapt", "microsoft/deberta-v3-large"]:
 
-            model_encoding = AutoModel.from_pretrained(model_choice)
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1024
             self.encoderModel = model_encoding
 
           elif model_choice in ["nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large", "microsoft/deberta-v3-xsmall"]:
 
-            model_encoding = AutoModel.from_pretrained(model_choice)
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 384
             self.encoderModel = model_encoding
 
           elif model_choice == "t5-small":
 
-            model_encoding = AutoModel.from_pretrained(model_choice)
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 512
             self.encoderModel = model_encoding
 
           elif model_choice in ["EleutherAI/gpt-neo-1.3B", "google/t5-xl-lm-adapt"]:
 
-            model_encoding = T5ForConditionalGeneration.from_pretrained(model_choice)
+            model_encoding = T5ForConditionalGeneration.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 2048
             self.encoderModel = model_encoding
 
           elif model_choice in ["microsoft/deberta-v2-xlarge", "microsoft/deberta-v2-xxlarge"]:
 
-            model_encoding = AutoModel.from_pretrained(model_choice)
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 1536
             self.encoderModel = model_encoding
 
           else:
 
-            model_encoding = AutoModel.from_pretrained(model_choice)
+            model_encoding = AutoModel.from_pretrained(model_choice, output_hidden_states=True)
             embedding_size = 768
             self.encoderModel = model_encoding
 
@@ -182,29 +182,129 @@ class CustomBERTModel(nn.Module):
 
           #print(self.encoderModel.__dict__)
 
+          #total_exit_ramps = []
+          #for i in range(0, len(self.encoderModel.encoder.layer)):
+          	
+          #	next_ramp = nn.Sequential(
+          #                                  nn.Linear(embedding_size, 256),
+          #                                  nn.Linear(256, number_of_labels)
+          #                           )
+          	
+          #	total_exit_ramps.append(next_ramp)
+
+          ########################################################
+
+          if frozen_layer_count <= 3:
+          	self.classifier2 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier3 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier4 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          if frozen_layer_count <= 6:
+          	self.classifier5 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier6 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier7 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          if frozen_layer_count <= 9:
+          	self.classifier8 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier9 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier10 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          if frozen_layer_count <= 12:
+          	self.classifier11 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier12 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier13 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          if frozen_layer_count <= 15:
+          	self.classifier14 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier15 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier16 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          if frozen_layer_count <= 18:
+          	self.classifier17 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier18 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier19 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          if frozen_layer_count <= 21:
+          	self.classifier20 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier21 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+          	self.classifier22 = nn.Sequential(nn.Linear(embedding_size, 256), nn.Linear(256, number_of_labels))
+
 
           
 
-    def forward(self, ids, mask, decoder_input_ids=None):
-          
-        if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
+    def forward(self, ids, mask, training_highway):
 
-            total_output = self.encoderModel(input_ids=ids, attention_mask=mask)
+        if training_highway == False:
+
+            forward_pass_start = time.time()
+
+            total_output = self.encoderModel(ids, attention_mask=mask)
+
+            sequence_output = total_output['last_hidden_state']
+            linear2_output = self.classifier(sequence_output[:,0,:].view(-1, self.embedding_size))
+
+            #print("linear2_output")
+            #print(linear2_output.shape)
+
+            forward_pass_time = time.time() - forward_pass_start
+
+            return linear2_output, forward_pass_time
 
         else:
 
-            total_output = self.encoderModel(
-                ids, 
-                attention_mask=mask)
+            forward_pass_start = time.time()
 
-        sequence_output = total_output['last_hidden_state']
+            total_output = self.encoderModel(ids, attention_mask=mask)
 
-        #linear1_output = self.linear1(sequence_output[:,0,:].view(-1, self.embedding_size))
-        #linear2_output = self.linear2(linear1_output)
+            total_highway_results = []
+            if frozen_layers <= 3: 
+            	total_highway_results.append(self.classifier2(total_output['hidden_states'][2][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier3(total_output['hidden_states'][3][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier4(total_output['hidden_states'][4][:,0,:].view(-1, self.embedding_size)))
+            if frozen_layers <= 6: 
+            	total_highway_results.append(self.classifier5(total_output['hidden_states'][5][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier6(total_output['hidden_states'][6][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier7(total_output['hidden_states'][7][:,0,:].view(-1, self.embedding_size)))
+            if frozen_layers <= 9: 
+            	total_highway_results.append(self.classifier8(total_output['hidden_states'][8][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier9(total_output['hidden_states'][9][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier10(total_output['hidden_states'][10][:,0,:].view(-1, self.embedding_size)))
+            if frozen_layers <= 12: 
+            	total_highway_results.append(self.classifier11(total_output['hidden_states'][11][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier12(total_output['hidden_states'][12][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier13(total_output['hidden_states'][13][:,0,:].view(-1, self.embedding_size)))
+            if frozen_layers <= 15: 
+            	total_highway_results.append(self.classifier14(total_output['hidden_states'][14][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier15(total_output['hidden_states'][15][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier16(total_output['hidden_states'][16][:,0,:].view(-1, self.embedding_size)))
+            if frozen_layers <= 18: 
+            	total_highway_results.append(self.classifier17(total_output['hidden_states'][17][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier18(total_output['hidden_states'][18][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier19(total_output['hidden_states'][19][:,0,:].view(-1, self.embedding_size)))
+            if frozen_layers <= 21: 
+            	total_highway_results.append(self.classifier20(total_output['hidden_states'][20][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier21(total_output['hidden_states'][21][:,0,:].view(-1, self.embedding_size)))
+            	total_highway_results.append(self.classifier22(total_output['hidden_states'][22][:,0,:].view(-1, self.embedding_size)))
 
-        linear2_output = self.classifier(sequence_output[:,0,:].view(-1, self.embedding_size))
+            forward_pass_time = time.time() - forward_pass_start
 
-        return linear2_output
+            return total_highway_results, forward_pass_time
+
+            ############################################################
+
+            #total_highway_results = []
+
+            #for ramp_number in range(0, len(self.exit_ramps)):
+
+            #    current_hidden_state = total_output['hidden_states'][ramp_number]
+            #    current_ramp = self.exit_ramps[ramp_number].to(device)
+            #    exit_ramp_output = current_ramp(current_hidden_state[:,0,:].view(-1, self.embedding_size))
+            #    total_highway_results.append(exit_ramp_output)
+
+                #print("exit_ramp_output")
+                #print(exit_ramp_output.shape)
+
+            #forward_pass_time = time.time() - forward_pass_start
+
+            #return total_highway_results, forward_pass_time
+
+
+
+
 
 
 
@@ -216,87 +316,37 @@ device = torch.device(device)
 
 classification_datasets = ['chemprot', 'sci-cite', 'sciie-relation-extraction']
 
-num_epochs = 1 #1000 #10
-patience_value = 5 #10 #3
+num_epochs = 15 #1000 #10
+patience_value = 3 #10 #3
 current_dropout = True
 number_of_runs = 1 #1 #5
 frozen_choice = False
 #chosen_learning_rate = 0.0001 #5e-6, 1e-5, 2e-5, 5e-5, 0.001
-frozen_layers = 12 #12 layers for BERT total, 24 layers for T5 and RoBERTa, 48 for DeBERTa XXL
-frozen_embeddings = True
+frozen_layers = 0 #12 layers for BERT total, 24 layers for T5 and RoBERTa, 48 for DeBERTa XXL
+frozen_embeddings = False
 average_hidden_state = False
 
 validation_set_scoring = True
-assigned_batch_size = 8
-gradient_accumulation_multiplier = 4
+assigned_batch_size = 1
+gradient_accumulation_multiplier = 32
 
 num_warmup_steps = 100
 
-learning_rate_choices = [1e-4, 2e-4, 1e-5, 2e-5, 5e-5, 5e-6]
+learning_rate_choices = [2e-5]
 
 mlp_classifier = False
 
 ############################################################
+
+max_entropy_threshold = 0.0 #"0 0.001 0.005 0.01 0.05 0.1 0.15 0.2 0.3 0.4 0.5 0.6 0.7"
+
+############################################################
  
-#model_choice = "t5-3b"
-#tokenizer = T5Tokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = "microsoft/deberta-v3-large"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'bert-base-uncased'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
 
-model_choice = 'roberta-large'
-tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'microsoft/deberta-v3-small'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'microsoft/deberta-v3-xsmall'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'sentence-transformers/sentence-t5-base'
-#tokenizer = SentenceTransformer(model_choice, device='cuda').tokenizer 
-
-#model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = "distilbert-base-uncased"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = "t5-small"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = "SEBIS/code_trans_t5_large_source_code_summarization_python_multitask_finetune"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice, model_max_length=512)
-
-#model_choice = "EleutherAI/gpt-neo-1.3B"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-#tokenizer.pad_token = tokenizer.eos_token
-
-#model_choice = "google/t5-xl-lm-adapt"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-
-#model_choice = "microsoft/deberta-v2-xxlarge"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-
-#model_choice = "microsoft/deberta-v2-xlarge"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-
-#model_choice = "google/t5-large-lm-adapt"
-#tokenizer = AutoTokenizer.from_pretrained(model_choice)
-
-#tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
-#model_encoding = AutoModel.from_pretrained(model_choice)
-#embedding_size = 4096
-
+model_choice = "microsoft/deberta-v2-xlarge"
+tokenizer = AutoTokenizer.from_pretrained(model_choice)
 
 
 ############################################################
@@ -307,7 +357,17 @@ def tokenize_function(examples):
 
 ############################################################
 
-dataset_folder_path = "checkpoints/" + model_choice.replace("/", "-")
+def calculate_entropy(x, current_layer):
+
+    if current_layer < frozen_layers:
+        return 100000
+
+    x = torch.softmax(x, dim=-1)               # softmax normalized prob distribution
+    return -torch.sum(x*torch.log(x), dim=-1)  # entropy calculation on probs: -\sum(p \ln(p))
+
+############################################################
+
+dataset_folder_path = "checkpoints/deebert_early_exiting_recreation/" + model_choice.replace("/", "-")
 if not os.path.isdir(dataset_folder_path):
 
     print("Creating folder: " + dataset_folder_path)
@@ -334,7 +394,7 @@ for chosen_learning_rate in learning_rate_choices:
 
     for dataset in classification_datasets:
 
-        checkpoint_path = "checkpoints/" + model_choice.replace("/", "-") + "/" + dataset + "/" + str(chosen_learning_rate) + "_"
+        checkpoint_path = "checkpoints/deebert_early_exiting_recreation/" + model_choice.replace("/", "-") + "/" + dataset + "/" + str(chosen_learning_rate) + "_"
         checkpoint_path += str(frozen_layers) + "_" + str(frozen_embeddings) + "_" + str(number_of_runs)
         checkpoint_path += str(validation_set_scoring) + "_" + str(mlp_classifier) + ".pt"
 
@@ -427,21 +487,21 @@ for chosen_learning_rate in learning_rate_choices:
             validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
             validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 
-            test_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})
+            test_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:100]
             test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
             test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
 
         else:
 
-            training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:1000]
+            training_dataset_pandas = pd.DataFrame({'label': train_set_label, 'text': train_set_text})#[:100]
             training_dataset_arrow = pa.Table.from_pandas(training_dataset_pandas)
             training_dataset_arrow = datasets.Dataset(training_dataset_arrow)
 
-            validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:1000]
+            validation_dataset_pandas = pd.DataFrame({'label': dev_set_label, 'text': dev_set_text})#[:100]
             validation_dataset_arrow = pa.Table.from_pandas(validation_dataset_pandas)
             validation_dataset_arrow = datasets.Dataset(validation_dataset_arrow)
 
-            test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})
+            test_dataset_pandas = pd.DataFrame({'label': test_set_label, 'text': test_set_text})#[:100]
             test_dataset_arrow = pa.Table.from_pandas(test_dataset_pandas)
             test_dataset_arrow = datasets.Dataset(test_dataset_arrow)
 
@@ -492,11 +552,16 @@ for chosen_learning_rate in learning_rate_choices:
 
             criterion = nn.CrossEntropyLoss()
             optimizer = Adam(model.parameters(), lr=chosen_learning_rate) #5e-6
+            highway_optimizer = Adam(model.parameters(), lr=chosen_learning_rate) #5e-6
             #optimizer = Adam(model.parameters(), lr=1e-5) #5e-6
 
             num_training_steps = num_epochs * len(train_dataloader)
 
             lr_scheduler = get_scheduler(
+                name="linear", optimizer=optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps
+            )
+
+            highway_lr_scheduler = get_scheduler(
                 name="linear", optimizer=optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps
             )
 
@@ -533,28 +598,20 @@ for chosen_learning_rate in learning_rate_choices:
 
                 print("Current Epoch: " + str(epoch))
 
-                progress_bar = tqdm(range(len(train_dataloader)))
+                #######################################################################################
 
+                # Stage #1: Finetune Normally
+
+                progress_bar = tqdm(range(len(train_dataloader)))
 
                 gradient_accumulation_count = 0
 
                 model.train()
                 for batch in train_dataloader:
 
-                    #with torch.no_grad():
-                    
-                        #batch = {k: v.to(device) for k, v in batch.items()}
+                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 'training_highway': False}
 
-                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-
-                        if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
-                            new_batch['decoder_input_ids'] = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
-
-                        outputs = model(**new_batch)
-
-                        #print("Example outputs")
-                        #print(outputs)
-                        #print(labels)
+                        outputs, prediction_time = model(**new_batch)
 
                         loss = criterion(outputs, batch['labels'].to(device))
 
@@ -565,10 +622,65 @@ for chosen_learning_rate in learning_rate_choices:
                             optimizer.step()
                             lr_scheduler.step()
                             optimizer.zero_grad()
-                        
+
+                                              
                         progress_bar.update(1)
                         train_losses.append(loss.item())
 
+
+                #######################################################################################
+
+                # Step #2: Finetune highway ramps
+
+                layers_to_freeze = model.encoderModel.encoder.layer[:len(model.encoderModel.encoder.layer)]
+                for module in layers_to_freeze:
+                    for param in module.parameters():
+                        param.requires_grad = False
+
+                for param in model.encoderModel.embeddings.parameters():
+                    param.requires_grad = False
+
+                for param in model.classifier.parameters():
+                    param.requires_grad = False
+
+                progress_bar = tqdm(range(len(train_dataloader)))
+
+                gradient_accumulation_count = 0
+
+                model.train()
+                for batch in train_dataloader:
+
+                    new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 'training_highway': True}
+
+                    outputs, prediction_time = model(**new_batch)
+
+                    for highway_output in outputs:
+
+                        loss = criterion(highway_output, batch['labels'].to(device))
+                        loss.backward(retain_graph=True)
+
+                    gradient_accumulation_count += 1
+                    if gradient_accumulation_count % (gradient_accumulation_multiplier) == 0:
+                        highway_optimizer.step()
+                        highway_lr_scheduler.step()
+                        highway_optimizer.zero_grad()
+                                              
+                    progress_bar.update(1)
+
+                #######################################################################################
+
+                layers_to_freeze = model.encoderModel.encoder.layer[:len(model.encoderModel.encoder.layer)]
+                for module in layers_to_freeze:
+                    for param in module.parameters():
+                        param.requires_grad = True
+
+                for param in model.encoderModel.embeddings.parameters():
+                    param.requires_grad = True
+
+                for param in model.classifier.parameters():
+                    param.requires_grad = True
+
+                #######################################################################################
 
                 progress_bar = tqdm(range(len(validation_dataloader)))
 
@@ -577,15 +689,9 @@ for chosen_learning_rate in learning_rate_choices:
 
                     #with torch.no_grad():
                     
-                        #batch = {k: v.to(device) for k, v in batch.items()}
-                        #labels = batch['labels']
+                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 'training_highway': False}
 
-                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device)}
-
-                        if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
-                            new_batch['decoder_input_ids'] = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
-                        
-                        outputs = model(**new_batch)
+                        outputs, prediction_time = model(**new_batch)
 
                         loss = criterion(outputs, batch['labels'].to(device))
                         progress_bar.update(1)
@@ -639,8 +745,8 @@ for chosen_learning_rate in learning_rate_choices:
             metric = load_metric("accuracy")
             #model.eval()
 
-            total_predictions = torch.FloatTensor([]).to(device)
-            total_references = torch.FloatTensor([]).to(device)
+            total_predictions = torch.FloatTensor([])#.to(device)
+            total_references = torch.FloatTensor([])#.to(device)
 
             #progress_bar = tqdm(range(len(eval_dataloader)))
             #for batch in eval_dataloader:
@@ -649,44 +755,55 @@ for chosen_learning_rate in learning_rate_choices:
 
             inference_start = time.time()
 
-            losses = []
-
-            preds = None
-            out_label_ids = None
+            inference_time_per_example = []
 
             for batch in eval_dataloader:
                 model.eval()
 
                 with torch.no_grad():
 
-                    new_batch = {k: v.to(device) for k, v in batch.items()}
+                    #new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 'training_highway': True}
+                    #exit_ramp_outputs, prediction_time = model(**new_batch)
 
-                    if model_choice in ["t5-small", "google/t5-xl-lm-adapt", "google/t5-large-lm-adapt"]:
-                        new_batch['decoder_input_ids'] = batch['labels'].reshape(batch['labels'].shape[0], 1).to(device)
+                    exit_ramp_taken = False
+                    # for k in range(0, len(exit_ramp_outputs)):
+                		
+                    #     current_entropy = calculate_entropy(exit_ramp_outputs[k], k)
 
-                    outputs = model(**new_batch)
+                    #     #print("current_entropy")
+                    #     #print(current_entropy)
 
-                    #labels = batch['labels'].to(device)
+                    #     if current_entropy < max_entropy_threshold:
 
-                    logits = outputs
+                    #         predictions = torch.argmax(exit_ramp_outputs[k], dim=-1)
 
-                    loss = criterion(outputs, batch['labels'].to(device))
-                    losses.append(loss)
+                    #         total_predictions = torch.cat((total_predictions, predictions.detach().cpu()), 0)
+                    #         total_references = torch.cat((total_references, batch['labels'].detach().cpu()), 0)
 
-                    predictions = torch.argmax(logits, dim=-1)
-                    #metric.add_batch(predictions=predictions.detach().cpu().numpy(), references=batch['labels'].detach().cpu().numpy())
+                    #         progress_bar.update(1)
 
-                    #total_predictions = torch.cat((total_predictions, predictions.detach().cpu().numpy()), 0)
-                    #total_references = torch.cat((total_references, batch['labels'].detach().cpu().numpy()), 0)
+                    #         inference_time_per_example.append(k / len(model.encoderModel.encoder.layer))
 
-                    if preds is None:
-                        preds = logits.detach().cpu().numpy()
-                        out_label_ids = batch['labels'].detach().cpu().numpy()
-                    else:
-                        preds = np.append(preds, logits.detach().cpu().numpy(), axis=0)
-                        out_label_ids = np.append(out_label_ids, batch['labels'].detach().cpu().numpy(), axis=0)
+                    #         exit_ramp_taken = True 
+                    #         break
 
-                    progress_bar.update(1)
+                    #############################################################
+
+                    if not exit_ramp_taken:
+
+                        new_batch = {'ids': batch['input_ids'].to(device), 'mask': batch['attention_mask'].to(device), 'training_highway': False}
+
+                        standard_outputs, prediction_time = model(**new_batch)
+
+                        standard_logits = standard_outputs
+                        predictions = torch.argmax(standard_logits, dim=-1)
+
+                        total_predictions = torch.cat((total_predictions, predictions.detach().cpu()), 0)
+                        total_references = torch.cat((total_references, batch['labels'].detach().cpu()), 0)
+
+                        inference_time_per_example.append(1.0)
+
+                        progress_bar.update(1)
 
 
             inference_end = time.time()
@@ -700,6 +817,9 @@ for chosen_learning_rate in learning_rate_choices:
             print(total_predictions.shape)
             print(total_references.shape)
 
+            total_predictions = total_predictions.numpy()
+            total_references = total_references.numpy()
+
             results = metric.compute(references=total_references, predictions=total_predictions)
             print("Accuracy for Test Set: " + str(results['accuracy']))
 
@@ -711,6 +831,8 @@ for chosen_learning_rate in learning_rate_choices:
 
             micro_averages.append(micro_f_1_results['f1'] * 100)
             macro_averages.append(macro_f_1_results['f1'] * 100)
+
+            print("Expected Saving for Inference Time: " + str(statistics.mean(inference_time_per_example)))
 
 
         print("Processing " + dataset + " using " + model_choice + " with " + str(current_dropout) + " for current_dropout")
@@ -910,8 +1032,5 @@ print("Micro and Macro StDs")
 for dataset in classification_datasets:
 
     print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][0], 2))) 
-    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1], 2))) 
-
-
-
+    print(str(round(dataset_to_best_lr_dict[dataset]['best_combined_stds'][1], 2)))
 

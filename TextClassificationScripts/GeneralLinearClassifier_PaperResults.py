@@ -56,7 +56,7 @@ class CustomBERTModel(nn.Module):
 
           super(CustomBERTModel, self).__init__()
           
-          if model_choice == "roberta-large":
+          if model_choice in ["roberta-large", "microsoft/deberta-v3-large"]:
 
             model_encoding = AutoModel.from_pretrained(model_choice)
             embedding_size = 1024
@@ -169,7 +169,7 @@ device = torch.device(device)
 num_epochs = 100 #1000 #10
 patience_value = 5 #10 #3
 current_dropout = True
-number_of_runs = 1 #1 #5
+number_of_runs = 5 #1 #5
 frozen_choice = False
 average_hidden_state = False
 
@@ -189,14 +189,15 @@ gradient_accumulation_multiplier = 8
 ############################################################
 
 classification_datasets = ['chemprot', 'sci-cite', "sciie-relation-extraction"]
-learning_rate_for_each_dataset = [1e-5, 1e-5, 2e-5] # Learning rate choices for the Chemprot, SciCite, 
+learning_rate_for_each_dataset = [1e-5, 5e-5, 2e-5] # Learning rate choices for the Chemprot, SciCite, 
                                                     # and SciERC-Relation respectively
 
-frozen_layers = 12 # For freezing k-later layers of transformer model
-frozen_embeddings = True # For freezing input embeddings layer of transformer model
+frozen_layers = 0 # For freezing k-later layers of transformer model
+frozen_embeddings = False # For freezing input embeddings layer of transformer model
 
+model_choice = "microsoft/deberta-v3-large"
 #model_choice = "microsoft/deberta-v2-xlarge"
-model_choice = 'roberta-large'
+#model_choice = 'roberta-large'
 #model_choice = 'allenai/scibert_scivocab_uncased'
 #model_choice = 'nreimers/MiniLMv2-L6-H384-distilled-from-RoBERTa-Large'
 #model_choice = 'nreimers/MiniLMv2-L6-H768-distilled-from-RoBERTa-Large'
