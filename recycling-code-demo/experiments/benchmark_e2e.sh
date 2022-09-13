@@ -14,7 +14,7 @@ START_DT="$(date +'%Y-%m-%d_%H-%M')"
 
 
 ###### CONFIGURATION HERE ######
-tries=7
+tries=3
 backbones=(
     'nreimers/MiniLMv2-L6-H384-distilled-from-BERT-Large'
     'nreimers/MiniLMv2-L6-H768-distilled-from-BERT-Large'
@@ -22,10 +22,13 @@ backbones=(
     'bert-large-uncased'
     # 'microsoft/deberta-v2-xlarge'
 )
-half_precision=('true' 'false')
-batch_size='64'
-fetch_ahead='16'
+# half_precision=('true' 'false')
+half_precision=('true')
+batch_size='16'     # for training
+# batch_size='64'   # for inference
+# fetch_ahead='16'
 fetch_spawn='thread'
+is_train='true'
 # fetch_spawn='process'
 cache_path='/tmp/r3'
 ###############################
@@ -49,6 +52,7 @@ for backbone in "${backbones[@]}"; do
                 device=cuda \
                 keep_cache='true' \
                 steps='[3]' \
+                is_train="${is_train}" \
                 batch_size=${batch_size} \
                 fetch_ahead=${fetch_ahead} \
                 cache.half_precision=${hp} \
@@ -74,6 +78,7 @@ for backbone in "${backbones[@]}"; do
                 device=cuda \
                 keep_cache='true' \
                 steps='[2,4,5]' \
+                is_train="${is_train}" \
                 batch_size=${batch_size} \
                 fetch_ahead=${fetch_ahead} \
                 cache.half_precision=${hp} \

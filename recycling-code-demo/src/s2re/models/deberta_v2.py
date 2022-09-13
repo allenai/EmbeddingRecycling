@@ -86,7 +86,7 @@ class CachedDebertaV2Encoder(BaseModuleWithCaching, DebertaV2Encoder):
 
 
 class CachedDebertaV2Model(DebertaV2Model):
-    def __init__(
+        def __init__(
         self, config: CachedDebertaV2Config
     ):
         super().__init__(config=config)
