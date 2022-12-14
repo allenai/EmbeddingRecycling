@@ -33,7 +33,6 @@ class CachedBertEmbeddings(CacheKeyLookup, BertEmbeddings):
 
 
 class NoOpWhenCachedBertLayer(NoOpWhenCached, BertLayer):
-    @property
     def get_cache_hit_value(self):
         return [None]
 
