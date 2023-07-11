@@ -25,11 +25,14 @@ except ImportError:
 
 
 class CachedBertEmbeddings(CacheKeyLookup, BertEmbeddings):
-    ...
+    def get_cache_arg_name_or_pos(self):
+        return "input_ids", 0
+
+    def forward(self, *args, **kwargs):
+        return super().forward(*args, **kwargs)
 
 
 class NoOpWhenCachedBertLayer(NoOpWhenCached, BertLayer):
-    @property
     def get_cache_hit_value(self):
         return [None]
 
